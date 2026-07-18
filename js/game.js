@@ -460,6 +460,92 @@ function render() {
   }
 
   ctx.restore();
+
+  // Die Minimap liegt fest in der Ecke (Bildschirm-Ebene), daher NACH restore()
+  drawMinimap();
+}
+
+// ---------- MINIMAP ----------
+// Kleine Übersichtskarte unten rechts. Sie zeigt die Biome, die Lagerfeuer,
+// alle Mitspieler und die eigene Position. Für die Biome nutzt sie dieselbe
+// Liste (CONFIG.biomes), die auch den Hintergrund färbt — sobald die Biome im
+// Spiel sind, erscheinen sie hier automatisch, ohne weitere Änderung.
+const MINIMAP_SIZE = 160;    // Kantenlänge in Pixeln
+const MINIMAP_MARGIN = 12;   // Abstand zum Bildschirmrand
+
+// Eine Welt-Position (0..worldSize) auf einen Punkt in der Minimap umrechnen
+function worldToMinimap(wx, wy, x0, y0, scale) {
+  return { x: x0 + wx * scale, y: y0 + wy * scale };
+}
+
+function drawMinimap() {
+  if (!joined) return;
+
+  const size = MINIMAP_SIZE;
+  const x0 = canvas.width - size - MINIMAP_MARGIN;
+  const y0 = canvas.height - size - MINIMAP_MARGIN;
+  const scale = size / CONFIG.worldSize;
+
+  ctx.save();
+
+  // Dunkler Rahmen hinter der Karte
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.fillRect(x0 - 2, y0 - 2, size + 4, size + 4);
+
+  // Auf das Karten-Quadrat beschränken, damit nichts übersteht
+  ctx.beginPath();
+  ctx.rect(x0, y0, size, size);
+  ctx.clip();
+
+  // Biome zeichnen (oder ein neutraler Hintergrund, solange es noch keine gibt)
+  if (CONFIG.biomes && CONFIG.biomes.length > 0) {
+    for (const b of CONFIG.biomes) {
+      ctx.fillStyle = b.color;
+      ctx.fillRect(x0 + b.x * scale, y0 + b.y * scale, b.w * scale, b.h * scale);
+    }
+  } else {
+    ctx.fillStyle = "#3d8b3d";
+    ctx.fillRect(x0, y0, size, size);
+  }
+
+  // Lagerfeuer als kleine orange Punkte
+  for (const s of structures) {
+    const p = worldToMinimap(s.x, s.y, x0, y0, scale);
+    ctx.fillStyle = "#ff9800";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Mitspieler als weiße Punkte (tote leicht durchscheinend)
+  for (const [id, player] of players) {
+    if (id === myId) continue;
+    const p = worldToMinimap(player.tx, player.ty, x0, y0, scale);
+    ctx.fillStyle = player.dead ? "rgba(255, 255, 255, 0.35)" : "#ffffff";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Die eigene Figur zuletzt: größerer gelber Punkt mit schwarzem Rand
+  const me = players.get(myId);
+  if (me) {
+    const p = worldToMinimap(me.x, me.y, x0, y0, scale);
+    ctx.fillStyle = "#ffd54f";
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // Weiße Rahmenlinie über der Karte
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x0, y0, size, size);
 }
 
 // Ein Lagerfeuer zeichnen: Holzscheite + flackernde Flamme
