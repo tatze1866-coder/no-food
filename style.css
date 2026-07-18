@@ -241,13 +241,36 @@ body {
   text-align: center;
 }
 
-/* Eine Zeile im Bau-Menü: Icon + Name + Kosten + Knopf */
+/* Eine Zeile im Bau-Menü: Icon + Name + Kosten. Die ganze Zeile ist
+   klickbar und baut das Rezept — kein extra Bauen-Knopf mehr. */
 .recipe {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   padding: 8px;
   margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.recipe:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.recipe:active {
+  background: rgba(67, 160, 71, 0.35);
+}
+
+/* Nicht baubar (fehlende Materialien): abgedimmt, nicht anklickbar */
+.recipe.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.recipe.disabled:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .recipe-head {
@@ -280,27 +303,6 @@ body {
   font-size: 12px;
   color: #ffcc80;
   margin-bottom: 6px;
-}
-
-.recipe button {
-  width: 100%;
-  padding: 6px;
-  font-size: 14px;
-  font-weight: bold;
-  color: #fff;
-  background: #43a047;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.recipe button:hover:not(:disabled) {
-  background: #2e7d32;
-}
-
-.recipe button:disabled {
-  background: #555;
-  cursor: not-allowed;
 }
 
 /* Start-Bildschirm (Name eingeben und beitreten) */

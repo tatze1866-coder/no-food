@@ -500,6 +500,7 @@ function buildRecipeMenu() {
     const recipe = RECIPES[id];
     const row = document.createElement("div");
     row.className = "recipe";
+    row.dataset.recipe = id;
 
     // Kopf: Icon + Name des Ergebnisses
     const resultId = Object.keys(recipe.result)[0];
@@ -523,12 +524,11 @@ function buildRecipeMenu() {
       row.appendChild(hint);
     }
 
-    // Bauen-Knopf
-    const btn = document.createElement("button");
-    btn.textContent = "Bauen";
-    btn.dataset.recipe = id;
-    btn.addEventListener("click", () => sendMessage({ t: "craft", recipe: id }));
-    row.appendChild(btn);
+    // Die ganze Zeile ist der "Bauen"-Knopf: einfach draufklicken
+    row.addEventListener("click", () => {
+      if (row.classList.contains("disabled")) return;
+      sendMessage({ t: "craft", recipe: id });
+    });
 
     list.appendChild(row);
   }
@@ -541,8 +541,8 @@ function refreshRecipeMenu(me) {
   for (const id in RECIPES) {
     const recipe = RECIPES[id];
     const costEl = document.querySelector('.recipe-cost[data-recipe="' + id + '"]');
-    const btn = document.querySelector('.recipe button[data-recipe="' + id + '"]');
-    if (!costEl || !btn) continue;
+    const row = document.querySelector('.recipe[data-recipe="' + id + '"]');
+    if (!costEl || !row) continue;
 
     let affordable = true;
     const parts = [];
@@ -555,7 +555,7 @@ function refreshRecipeMenu(me) {
       parts.push("<span" + cls + ">" + itemIcon + " " + have + "/" + recipe.cost[need] + "</span>");
     }
     costEl.innerHTML = parts.join(" &nbsp; ");
-    btn.disabled = !affordable;
+    row.classList.toggle("disabled", !affordable);
   }
 }
 
