@@ -30,7 +30,11 @@ Eisbären (Schnee, immer feindlich). Der Server hält einen **Tag/Nacht-Wechsel*
 enthält dafür `night` und die Liste `animals` (nur lebende Tiere). Feindliche
 Tiere verfolgen nur Spieler im eigenen Biom und beißen mit 1 s Sperre; getötete
 Tiere geben **Fleisch** (`meat` im Inventar, essen mit E — sättigt mehr als
-Beeren) und spawnen nach `animalRespawn` Sekunden neu. Die Tier-Werte stehen in
+Beeren) und spawnen nach `animalRespawn` Sekunden neu. Alle Tiere sind langsamer
+als der Spieler und bewegen sich **ruckweise** (Ruck–Stopp, siehe
+`animalMoveTime`/`animalPauseTime` in `CONFIG`): der Rhythmus steckt in
+`moveAnimal()` und gilt für Jagen, Fliehen und Wandern — so kann man Tieren
+ausweichen (und Hasen einholen). Die Tier-Werte stehen in
 `ANIMAL_TYPES` (Abschnitt 1), die KI in `updateAnimal()` (Abschnitt 6).
 
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)

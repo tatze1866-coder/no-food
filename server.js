@@ -62,6 +62,8 @@ const CONFIG = {
   animalRespawn: 30,      // Sekunden bis ein getötetes Tier neu spawnt
   aggroRange: 260,        // Ab dieser Entfernung verfolgen feindliche Tiere
   fleeRange: 150,         // Ab dieser Entfernung fliehen Hasen vor Spielern
+  animalMoveTime: 0.6,    // Sekunden pro Bewegungs-Ruck der Tiere
+  animalPauseTime: 0.6,   // Sekunden Stopp nach einem Ruck (Ausweichen möglich)
 
   // --- Item-/Crafting-System (Claude) -------------------------------
   capacity: 20,           // Obergrenze pro Item-Sorte im Inventar
@@ -132,10 +134,10 @@ const RECIPES = {
 // hostile: "never" = nie feindlich, "night" = nur nachts, "always" = immer.
 // meat = wie viele rohe Fleischstücke ein getötetes Tier fallen lässt.
 const ANIMAL_TYPES = {
-  rabbit: { biome: "forest", speed: 200, health: 20, damage: 0,  meat: 2, radius: 14, hostile: "never"  },
-  spider: { biome: "forest", speed: 220, health: 30, damage: 8,  meat: 1, radius: 14, hostile: "night"  },
-  wolf:   { biome: "forest", speed: 260, health: 40, damage: 10, meat: 2, radius: 18, hostile: "always" },
-  bear:   { biome: "snow",   speed: 230, health: 60, damage: 15, meat: 3, radius: 24, hostile: "always" },
+  rabbit: { biome: "forest", speed: 170, health: 20, damage: 0,  meat: 2, radius: 14, hostile: "never"  },
+  spider: { biome: "forest", speed: 180, health: 30, damage: 8,  meat: 1, radius: 14, hostile: "night"  },
+  wolf:   { biome: "forest", speed: 200, health: 40, damage: 10, meat: 2, radius: 18, hostile: "always" },
+  bear:   { biome: "snow",   speed: 180, health: 60, damage: 15, meat: 3, radius: 24, hostile: "always" },
 };
 
 const TICKS_PER_SECOND = 20;   // Wie oft pro Sekunde der Server rechnet
@@ -302,6 +304,8 @@ function spawnAnimals() {
         attackTimer: 0,                     // Sperre zwischen zwei Angriffen
         wanderAngle: rand(0, Math.PI * 2),  // aktuelle Richtung beim Wandern
         wanderTimer: 0,                     // wann die Richtung wieder wechselt
+        // Zufallsstart im Ruck/Stopp-Zyklus, damit nicht alle im Gleichtakt rucken
+        impulseTimer: rand(0, CONFIG.animalMoveTime + CONFIG.animalPauseTime),
       });
     }
   }
@@ -565,15 +569,26 @@ function update(dt) {
   }
 }
 
-// Ein Tier bewegen — es bleibt dabei immer in seinem eigenen Biom
+// Ein Tier bewegen — es bleibt dabei immer in seinem eigenen Biom.
+// Die Bewegung passiert in Rucken: Ruck und Stopp wechseln sich ab
+// (animalMoveTime/animalPauseTime), damit man den Tieren ausweichen kann.
 function moveAnimal(animal, angle, speed, dt) {
   const type = ANIMAL_TYPES[animal.species];
   const biome = BIOMES.find((b) => b.name === type.biome);
-  animal.x += Math.cos(angle) * speed * dt;
-  animal.y += Math.sin(angle) * speed * dt;
-  animal.x = clamp(animal.x, biome.x + type.radius, biome.x + biome.w - type.radius);
-  animal.y = clamp(animal.y, biome.y + type.radius, biome.y + biome.h - type.radius);
-  animal.angle = angle;
+
+  // Ruck/Stopp-Uhr weiterdrehen
+  animal.impulseTimer -= dt;
+  const cycle = CONFIG.animalMoveTime + CONFIG.animalPauseTime;
+  if (animal.impulseTimer <= 0) animal.impulseTimer += cycle;
+
+  // Nur in der Ruck-Phase wirklich bewegen, sonst stehen bleiben
+  if (animal.impulseTimer > CONFIG.animalPauseTime) {
+    animal.x += Math.cos(angle) * speed * dt;
+    animal.y += Math.sin(angle) * speed * dt;
+    animal.x = clamp(animal.x, biome.x + type.radius, biome.x + biome.w - type.radius);
+    animal.y = clamp(animal.y, biome.y + type.radius, biome.y + biome.h - type.radius);
+  }
+  animal.angle = angle; // Blickrichtung auch im Stopp aktualisieren
 }
 
 // Das Verhalten eines Tiers (wird pro Tick aufgerufen)

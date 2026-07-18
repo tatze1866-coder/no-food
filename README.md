@@ -59,7 +59,8 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 - 🌳 **Bäume** schlagen gibt **Holz**
 - 🐇 **Hasen** (Wald) sind harmlos und fliehen vor dir — jage sie für **Fleisch** 🍗
   (sättigt mehr als Beeren; Fleisch essen ebenfalls mit **E**)
-- 🐺 **Wölfe** (Wald) und 🐻‍❄️ **Eisbären** (Schnee) jagen **dich** — schlage zurück oder lauf weg!
+- 🐺 **Wölfe** (Wald) und 🐻‍❄️ **Eisbären** (Schnee) jagen **dich** — sie bewegen
+  sich ruckweise (Ruck–Stopp), also im richtigen Moment ausweichen oder zurückschlagen!
 - 🕷️ **Spinnen** (Wald) sind tagsüber friedlich, aber **nachts** feindlich
 - 🌙 **Tag und Nacht** wechseln sich ab — nachts wird es dunkel
 - 🪨 **Steine** schlagen gibt **Stein**

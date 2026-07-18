@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## Unveröffentlicht (Branch `kimi`)
+
+### Geändert
+- **Tiere sind langsamer** (alle deutlich unter dem Spieler-Tempo 240: Hase 170,
+  Spinne 180, Wolf 200, Eisbär 180) und bewegen sich **ruckweise** —
+  Ruck–Stopp–Ruck–Stopp (`animalMoveTime`/`animalPauseTime` in `CONFIG`,
+  umgesetzt in `moveAnimal()`, gilt für Jagen, Fliehen und Wandern).
+  Man kann den Tieren jetzt ausweichen — und Hasen beim Jagen einholen.
+
 ## 2026-07-18 — Zusammenführung: Crafting + Biome + Tiere (Branch `main`)
 
 Die parallel entstandenen Stände von Claude (Crafting/Minimap) und Kimi
