@@ -762,7 +762,7 @@ function drawAnimal(a) {
     // Sprite-Bild verwenden (ersetzt die frühere Vektor-Zeichnung)
     const img = animalImages[a.species];
     // Jede Art hat ihre eigene Größe (Vielfaches des Kollisionsradius)
-    const SPRITE_SCALE = { rabbit: 8.5, wolf: 13, spider: 13 };
+    const SPRITE_SCALE = { rabbit: 8.5, wolf: 13, spider: 26 };
     const size = r * (SPRITE_SCALE[a.species] || 6.5);
     if (img && img.complete && img.naturalWidth > 0) {
       const aspect = img.naturalWidth / img.naturalHeight;
@@ -845,7 +845,7 @@ function drawPlayer(p) {
   if (p.equipped && ITEMS[p.equipped]) {
     const toolImg = getItemImage(p.equipped);
     if (toolImg && toolImg.complete && toolImg.naturalWidth > 0) {
-      const th = r * 1.7;
+      const th = r * 4.25; // 2.5x größer als vorher
       const tw = th * (toolImg.naturalWidth / toolImg.naturalHeight);
       ctx.drawImage(toolImg, r * 0.95 + punch - tw / 2, r * 0.6 - th / 2, tw, th);
     } else {
