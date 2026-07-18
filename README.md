@@ -49,7 +49,10 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 | **W A S D** (oder Pfeiltasten) | Laufen |
 | **Maus** | Blickrichtung |
 | **Linksklick** | Schlagen / Sammeln |
-| **E** | Beere essen |
+| **E** | Essen (bestes vorhandenes) |
+| **1–9** | Item im Hotbar-Slot benutzen (Werkzeug anlegen, Essen, Lagerfeuer setzen) |
+| **C** | Bau-Menü öffnen/schließen |
+| **F** | Lagerfeuer setzen |
 
 ## Spielregeln
 
@@ -63,6 +66,8 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
   sich ruckweise (Ruck–Stopp), also im richtigen Moment ausweichen oder zurückschlagen!
 - 🕷️ **Spinnen** (Wald) sind tagsüber friedlich, aber **nachts** feindlich
 - 🌙 **Tag und Nacht** wechseln sich ab — nachts wird es dunkel
+- ❄️ **Kälte** steigt nachts und im Schnee — bei voller Kälteanzeige verlierst
+  du Leben! Wärme dich am **Lagerfeuer** (mit **F** oder per Hotbar setzen)
 - 🪨 **Steine** schlagen gibt **Stein**
 - 🍓 **Beerensträucher** schlagen gibt **Beeren** (wachsen nach!)
 - 🍖 Dein **Hunger** sinkt ständig — iss Beeren mit **E**
@@ -84,9 +89,10 @@ und danach einfach den Server neu starten.
 
 ## Geplante Features (Ideen)
 
-- [ ] Crafting (Werkzeuge aus Holz + Stein bauen)
-- [ ] Werkzeuge sammeln schneller
-- [ ] Kälte nachts (Lagerfeuer!)
+- [ ] Warme Kleidung aus Fellen (Schutz vor Kälte)
+- [x] Crafting (Werkzeuge aus Holz + Stein bauen)
+- [x] Werkzeuge sammeln schneller
+- [x] Kälte nachts und im Schnee (Lagerfeuer wärmt!)
 - [x] Tag/Nacht-Wechsel
 - [x] Tiere (Jagd und Gefahr)
 - [x] Multiplayer über das Internet

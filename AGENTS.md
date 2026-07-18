@@ -38,6 +38,16 @@ als der Spieler und bewegen sich **ruckweise** (Ruck–Stopp, siehe
 ausweichen (und Hasen einholen). Die Tier-Werte stehen in
 `ANIMAL_TYPES` (Abschnitt 1), die KI in `updateAnimal()` (Abschnitt 6).
 
+**Kälte:** Spieler haben einen Kälte-Wert (`cold`, 0 = warm, 100 = erfriert),
+der nachts (`nightColdRate`) und im Schnee-Biom (`snowColdRate`) steigt und am
+Tag im Wald (`dayWarmRate`) bzw. am Lagerfeuer (`campfireWarmRate`) sinkt; bei
+100 gibt es `freezeDamage` pro Sekunde. Anzeige als dritter Balken (`cold-fill`)
+im HUD. Das **Inventar ist eine Hotbar mit 9 Boxen**: Die Zahlentasten 1–9
+benutzen das Item im Slot (Werkzeug toggeln, Essen essen, Lagerfeuer setzen);
+die Slot-Reihenfolge folgt dem `ITEMS`-Katalog (Client: `hotbarItems()`).
+Dafür akzeptiert `eat` optional ein `item` (gezielt essen) und `ITEMS`
+markiert Essbares mit `food: true`.
+
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
 
 An diesem Projekt arbeiten **mehrere verschiedene KI-Assistenten** (Claude und
@@ -197,9 +207,10 @@ CI/CD-Prozess.
   serverseitig validiert (Booleans/Zahlen geprüft, Namen auf 16 Zeichen
   gekürzt). Schläge sind serverseitig per `hitCooldown` begrenzt.
 - Beim Ändern der HUD-Elemente in `index.html` darauf achten, dass die IDs
-  (`inv-wood`, `inv-stone`, `inv-berry`, `inv-meat`, `health-fill`, `hunger-fill`,
-  `survival-time`, `death-screen`, `restart-btn`, `player-count`,
-  `start-screen`, `name-input`, `start-btn`, `start-status`) mit den Zugriffen
-  in `js/game.js` übereinstimmen.
-- Geplante Features (siehe README.md): Crafting, Werkzeuge, Kälte/Lagerfeuer.
-  Multiplayer, Biome, Tag/Nacht-Wechsel und Tiere sind umgesetzt.
+  (`inventory`, `health-fill`, `hunger-fill`, `cold-fill`, `player-count`,
+  `craft-toggle`, `craft-menu`, `recipe-list`, `survival-time`, `death-screen`,
+  `restart-btn`, `start-screen`, `name-input`, `start-btn`, `start-status`)
+  mit den Zugriffen in `js/game.js` übereinstimmen.
+- Geplante Features (siehe README.md): warme Kleidung aus Fellen o. ä.
+  Multiplayer, Biome, Tag/Nacht-Wechsel, Tiere, Crafting, Lagerfeuer und
+  Kälte sind umgesetzt.

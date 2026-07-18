@@ -26,21 +26,40 @@ body {
   gap: 8px;
 }
 
+/* Die Hotbar hat immer 9 gleich große Boxen (belegt oder leer) */
 .slot {
+  position: relative; /* damit das Nummernbadge in der Ecke liegt */
+  width: 48px;
+  height: 48px;
   background: rgba(0, 0, 0, 0.45);
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 10px;
-  padding: 8px 12px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 2px;
   color: #fff;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: bold;
 }
 
 .slot .icon {
-  font-size: 22px;
+  font-size: 20px;
+}
+
+/* Kleine Nummer (Taste 1–9) oben links in der Box */
+.slot-num {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Leere Boxen: dezent abgedimmt und mit gestricheltem Rand */
+.slot.empty {
+  opacity: 0.4;
+  border-style: dashed;
 }
 
 /* Werkzeug-Slots sind anklickbar (zum Ausrüsten) */
@@ -58,7 +77,7 @@ body {
   background: rgba(255, 179, 0, 0.35);
 }
 
-/* Lebens- und Hungerbalken unten in der Mitte */
+/* Lebens-, Hunger- und Kältebalken unten in der Mitte */
 #bars {
   position: fixed;
   bottom: 40px;
@@ -88,6 +107,7 @@ body {
 
 .fill.health { background: linear-gradient(#ff6b6b, #d32f2f); }
 .fill.hunger { background: linear-gradient(#ffb74d, #ef6c00); }
+.fill.cold { background: linear-gradient(#4fc3f7, #0277bd); }
 
 .bar-label {
   position: absolute;

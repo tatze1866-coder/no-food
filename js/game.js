@@ -61,7 +61,34 @@ window.addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "e") sendMessage({ t: "eat" });
   if (e.key.toLowerCase() === "c") toggleCraftMenu();
   if (e.key.toLowerCase() === "f") sendMessage({ t: "place", item: "campfire" });
+
+  // Zahlentasten 1 bis 9: das Item in diesem Hotbar-Slot benutzen
+  // (bei anderen Tasten ist num NaN und nichts passiert)
+  const num = parseInt(e.key, 10);
+  if (num >= 1 && num <= 9) useHotbarSlot(num - 1);
 });
+
+// Benutzt das Item im Hotbar-Slot mit der Nummer index + 1.
+// Was passiert, hängt von der Art des Items ab:
+// Werkzeug anlegen/weglegen, Essen essen, Lagerfeuer aufstellen.
+// Rohstoffe (Holz, Stein, Felle …) kann man nicht direkt benutzen.
+function useHotbarSlot(index) {
+  const me = players.get(myId);
+  if (!me) return; // noch nicht im Spiel
+
+  // hotbarItems liefert dieselbe Reihenfolge wie die Anzeige oben links
+  const id = hotbarItems(me)[index];
+  if (!id) return; // leerer Slot oder kein Item dahinter
+
+  const item = ITEMS[id];
+  if (item && item.tool) {
+    sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
+  } else if (item && item.food) {
+    sendMessage({ t: "eat", item: id });
+  } else if (id === "campfire") {
+    sendMessage({ t: "place", item: "campfire" });
+  }
+}
 window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
 });
@@ -86,7 +113,8 @@ function currentInput() {
 // Nachrichten sind kleine JSON-Objekte. Das Feld "t" sagt, was gemeint ist
 // (die gleiche Liste steht oben in server.js — beide müssen zusammenpassen!).
 //
-// Browser -> Server:  join, input, hit, eat, craft, equip, place, respawn
+// Browser -> Server:  join, input, hit, eat (optional mit "item": gezielt
+//                     dieses eine Item essen), craft, equip, place, respawn
 // Server -> Browser:  welcome (inkl. Kataloge + Biome), state (inkl. Tiere,
 //                     Tag/Nacht, Lagerfeuer), playerLeft
 
@@ -217,6 +245,7 @@ function applyState(msg) {
     entry.angle = p.angle;
     entry.health = p.health;
     entry.hunger = p.hunger;
+    entry.cold = p.cold || 0; // Kälte: 0 bis 100 (100 = erfroren)
     entry.inventory = p.inventory || {};
     entry.equipped = p.equipped || null;
     entry.dead = p.dead;
@@ -341,11 +370,27 @@ function updateHUD(me) {
   if (me) {
     const healthPct = (me.health / CONFIG.maxHealth) * 100;
     const hungerPct = (me.hunger / CONFIG.maxHunger) * 100;
+    // Kälte kommt schon als Wert von 0 bis 100 (100 = erfroren)
+    const coldPct = ((me.cold || 0) / 100) * 100;
     document.getElementById("health-fill").style.width = healthPct + "%";
     document.getElementById("hunger-fill").style.width = hungerPct + "%";
+    document.getElementById("cold-fill").style.width = coldPct + "%";
     updateInventory(me);
   }
   document.getElementById("player-count").textContent = players.size + " Spieler online";
+}
+
+// Liste der Item-IDs, die der Spieler besitzt (Anzahl > 0), in der
+// Reihenfolge des Katalogs. Daraus entstehen die Hotbar-Slots 1 bis 9:
+// Sowohl die Anzeige (updateInventory) als auch die Zahlentasten
+// (useHotbarSlot) nutzen diese Funktion — so stimmen beide immer überein.
+function hotbarItems(me) {
+  const inv = me.inventory || {};
+  const list = [];
+  for (const id in ITEMS) {
+    if ((inv[id] || 0) > 0) list.push(id);
+  }
+  return list;
 }
 
 // Das Inventar wird nur neu gezeichnet, wenn sich wirklich etwas geändert hat
@@ -361,27 +406,37 @@ function updateInventory(me) {
   const container = document.getElementById("inventory");
   container.innerHTML = "";
 
-  // In der Reihenfolge des Katalogs durchgehen (stabile Anordnung)
-  for (const id in ITEMS) {
-    const count = inv[id] || 0;
-    if (count <= 0) continue;
+  // Die belegten Items in Katalog-Reihenfolge = Inhalt der Hotbar
+  const hotbar = hotbarItems(me);
 
-    const item = ITEMS[id];
+  // Immer genau 9 Boxen zeichnen — belegte mit Inhalt, der Rest leer
+  for (let i = 0; i < 9; i++) {
+    const id = hotbar[i];
     const slot = document.createElement("div");
     slot.className = "slot";
-    slot.innerHTML =
-      '<span class="icon">' + item.icon + '</span><span>' + count + "</span>";
 
-    // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
-    if (item.tool) {
-      slot.classList.add("tool");
-      if (me.equipped === id) slot.classList.add("equipped");
-      slot.title = "Klicken zum Ausrüsten";
-      slot.addEventListener("click", () => {
-        sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
-      });
+    // Kleine Nummer in der Ecke: die Taste, mit der man den Slot benutzt
+    let html = '<span class="slot-num">' + (i + 1) + "</span>";
+
+    if (id) {
+      const item = ITEMS[id];
+      html += '<span class="icon">' + item.icon + "</span><span>" + inv[id] + "</span>";
+
+      // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
+      if (item.tool) {
+        slot.classList.add("tool");
+        if (me.equipped === id) slot.classList.add("equipped");
+        slot.title = "Klicken zum Ausrüsten";
+        slot.addEventListener("click", () => {
+          sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
+        });
+      }
+    } else {
+      // Leere Boxen werden abgedimmt gezeichnet
+      slot.classList.add("empty");
     }
 
+    slot.innerHTML = html;
     container.appendChild(slot);
   }
 

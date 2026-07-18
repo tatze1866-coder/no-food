@@ -4,6 +4,17 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
 ## Unveröffentlicht (Branch `kimi`)
 
+### Hinzugefügt
+- **Kälte-Mechanik mit Anzeige**: neuer Balken ❄️ **Kälte** im HUD. Kälte steigt
+  nachts und im Schnee-Biom, sinkt am Tag im Wald und schnell am Lagerfeuer;
+  bei 100 verliert man Leben (Werte in `CONFIG`: `nightColdRate`, `snowColdRate`,
+  `dayWarmRate`, `campfireWarmRate`, `freezeDamage`).
+- **Hotbar 1–9**: Das Inventar zeigt immer 9 Boxen mit Nummernbadges; die
+  Zahlentasten benutzen das Item im Slot — Werkzeug anlegen/weglegen, Essen
+  essen, Lagerfeuer platzieren.
+- `eat`-Nachricht akzeptiert optional `item` (gezielt dieses Essen essen);
+  `ITEMS` markiert Essbares mit `food: true`.
+
 ### Geändert
 - **Karte stark vergrößert**: von 2400×2400 auf **36000×36000** (15× Kantenlänge).
   Ressourcen 15× so viele (die Welt bleibt bewachsen, aber weitläufiger), Tiere

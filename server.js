@@ -84,6 +84,14 @@ const CONFIG = {
   campfireBurnTime: 60,   // Sekunden, die ein Lagerfeuer brennt
   campfireRadius: 130,    // Wirkungsradius (Heilen + Kochen)
   campfireHeal: 4,        // Heilung pro Sekunde in der Nähe eines Feuers
+
+  // Kälte-System: cold = 0 heißt warm, cold = maxCold heißt erfriert
+  maxCold: 100,           // Ab dieser Kälte verliert der Spieler Leben
+  nightColdRate: 1.5,     // Kälte pro Sekunde nachts
+  snowColdRate: 1,        // Kälte pro Sekunde zusätzlich im Schnee-Biom (immer)
+  dayWarmRate: 6,         // Kälte-Rückgang pro Sekunde am Tag im Wald
+  campfireWarmRate: 25,   // Kälte-Rückgang pro Sekunde am Lagerfeuer
+  freezeDamage: 3,        // Leben pro Sekunde bei Kälte 100
   // ------------------------------------------------------------------
 };
 
@@ -92,11 +100,12 @@ const CONFIG = {
 // Emoji-Icon. Der Client bekommt diesen Katalog beim Beitritt ("welcome"),
 // damit Server und Browser immer dieselben Namen/Icons benutzen.
 // "tool: true" markiert Werkzeuge (die man ausrüsten kann).
+// "food: true" markiert Essbares (die man essen kann).
 const ITEMS = {
   // Rohstoffe
   wood:        { name: "Holz",            icon: "🪵" },
   stone:       { name: "Stein",           icon: "🪨" },
-  berry:       { name: "Beere",           icon: "🍓" },
+  berry:       { name: "Beere",           icon: "🍓", food: true },
 
   // Werkzeuge (ausrüstbar)
   axe:         { name: "Axt",             icon: "🪓", tool: true },
@@ -109,8 +118,8 @@ const ITEMS = {
 
   // Tier-Drops (Fleisch fällt schon von Tieren; Felle/Seide sind Platzhalter
   // für spätere Rezepte, z.B. warme Kleidung).
-  raw_meat:    { name: "Rohes Fleisch",   icon: "🥩" },
-  cooked_meat: { name: "Gebratenes Fleisch", icon: "🍖" },
+  raw_meat:    { name: "Rohes Fleisch",   icon: "🥩", food: true },
+  cooked_meat: { name: "Gebratenes Fleisch", icon: "🍖", food: true },
   rabbit_hide: { name: "Hasenfell",       icon: "🐇" },
   wolf_fur:    { name: "Wolfsfell",       icon: "🐺" },
   bear_fur:    { name: "Bärenfell",       icon: "🐻" },
@@ -360,6 +369,7 @@ function addPlayer(id, name) {
     angle: 0,           // Blickrichtung (zur Maus)
     health: CONFIG.maxHealth,
     hunger: CONFIG.maxHunger,
+    cold: 0,            // Wie sehr der Spieler friert (0 = warm, 100 = erfriert)
     inventory: {},      // Item-Sorte (id) -> Anzahl, z.B. { wood: 3, axe: 1 }
     equipped: null,     // Welches Werkzeug gerade in der Hand ist (id oder null)
     hitTimer: 0,        // Zeit bis zum nächsten möglichen Schlag
@@ -376,6 +386,7 @@ function resetPlayer(player) {
   player.y = spawn.y;
   player.health = CONFIG.maxHealth;
   player.hunger = CONFIG.maxHunger;
+  player.cold = 0;
   player.inventory = {};
   player.equipped = null;
   player.hitTimer = 0;
@@ -421,10 +432,32 @@ function takeItems(player, cost) {
   }
 }
 
-// Essen: bevorzugt gebratenes Fleisch (sättigt am meisten), dann rohes
-// Fleisch, sonst eine Beere.
-function eat(player) {
+// Wie gut sättigt ein Essen? (verweist auf die Werte in der CONFIG)
+function foodValue(itemId) {
+  if (itemId === "berry") return CONFIG.berryFood;
+  if (itemId === "raw_meat") return CONFIG.rawMeatFood;
+  if (itemId === "cooked_meat") return CONFIG.cookedMeatFood;
+  return 0; // alles andere ist kein Essen
+}
+
+// Essen. Mit itemId (z.B. "berry", vom Browser gewünscht) wird NUR genau
+// dieses Essen gegessen — wenn es existiert, essbar (food: true) und im
+// Inventar vorhanden ist; sonst passiert gar nichts (kein Ersatz-Essen).
+// Ohne itemId: automatisch das beste Essen — bevorzugt gebratenes
+// Fleisch (sättigt am meisten), dann rohes Fleisch, sonst eine Beere.
+function eat(player, itemId) {
   if (player.dead || player.hunger >= CONFIG.maxHunger) return;
+
+  // Ein bestimmtes Essen wurde gewünscht: nur dieses, kein Plan B
+  if (typeof itemId === "string") {
+    if (!ITEMS[itemId] || ITEMS[itemId].food !== true) return;
+    if (countItem(player, itemId) <= 0) return;
+    takeItems(player, { [itemId]: 1 });
+    player.hunger = clamp(player.hunger + foodValue(itemId), 0, CONFIG.maxHunger);
+    return;
+  }
+
+  // Automatisch: das beste vorhandene Essen
   if (countItem(player, "cooked_meat") > 0) {
     takeItems(player, { cooked_meat: 1 });
     player.hunger = clamp(player.hunger + CONFIG.cookedMeatFood, 0, CONFIG.maxHunger);
@@ -537,6 +570,31 @@ function update(dt) {
     // Wärme/Heilung durch ein Lagerfeuer in der Nähe (passt zum Schnee-Biom)
     if (nearCampfire(player.x, player.y)) {
       player.health = clamp(player.health + CONFIG.campfireHeal * dt, 0, CONFIG.maxHealth);
+    }
+
+    // --- Kälte ---
+    // cold sagt, wie sehr der Spieler friert: 0 = warm, 100 = erfriert.
+    // Kälte steigt nachts — und im Schnee-Biom immer (auch tagsüber).
+    // Wärmer wird es am Tag im Wald; ein Lagerfeuer wärmt zu jeder Zeit.
+    const biome = biomeAt(player.x, player.y);
+
+    // Kälte-Quellen zusammenzählen (pro Sekunde)
+    let coldChange = 0;
+    if (isNight()) coldChange += CONFIG.nightColdRate;
+    if (biome.name === "snow") coldChange += CONFIG.snowColdRate;
+
+    // Wärme-Quelle abziehen: das Feuer wärmt immer, sonst der Tag im Wald
+    if (nearCampfire(player.x, player.y)) {
+      coldChange -= CONFIG.campfireWarmRate;
+    } else if (!isNight() && biome.name === "forest") {
+      coldChange -= CONFIG.dayWarmRate;
+    }
+
+    player.cold = clamp(player.cold + coldChange * dt, 0, CONFIG.maxCold);
+
+    // Erfroren (Kälte bei 100): Leben sinkt — der Todes-Check darunter greift
+    if (player.cold >= CONFIG.maxCold) {
+      player.health -= CONFIG.freezeDamage * dt;
     }
 
     if (player.health <= 0) {
@@ -740,7 +798,7 @@ function tryHit(player) {
 //   { t: "join", name: "..." }              Spiel beitreten
 //   { t: "input", up, down, left, right, angle }   Tasten + Blickrichtung
 //   { t: "hit" }                            Schlagen
-//   { t: "eat" }                            Essen (Fleisch/Beere)
+//   { t: "eat", item: "berry" (optional) }  Essen (bestimmtes oder bestes)
 //   { t: "craft", recipe: "axe" }           Ein Rezept bauen
 //   { t: "equip", tool: "axe"|null }         Werkzeug ausrüsten / weglegen
 //   { t: "place", item: "campfire" }        Etwas platzieren (Lagerfeuer)
@@ -751,7 +809,7 @@ function tryHit(player) {
 //                 (config enthält u.a. biomes für den Hintergrund)
 //   { t: "state", players, bushes, animals, night, structures }
 //                 Spielstand (TICKS_PER_SECOND-mal/s); jeder Spieler mit
-//                 inventory {id->Anzahl} + equipped
+//                 health, hunger, cold, inventory {id->Anzahl} + equipped
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
 
 const wss = new WebSocketServer({ server: server, maxPayload: 16 * 1024 });
@@ -786,6 +844,7 @@ function stateMessage() {
       angle: Math.round(p.angle * 100) / 100,
       health: Math.round(p.health),
       hunger: Math.round(p.hunger),
+      cold: Math.round(p.cold),
       inventory: p.inventory,
       equipped: p.equipped,
       dead: p.dead,
@@ -893,7 +952,9 @@ wss.on("connection", (ws) => {
     } else if (msg.t === "hit") {
       tryHit(player);
     } else if (msg.t === "eat") {
-      eat(player);
+      // msg.item ist optional — alte Browser schicken es nicht (undefined),
+      // dann isst eat() wie bisher automatisch das beste Essen
+      eat(player, msg.item);
     } else if (msg.t === "craft") {
       if (typeof msg.recipe === "string") craft(player, msg.recipe);
     } else if (msg.t === "equip") {
