@@ -236,6 +236,13 @@ body {
   color: #ff8a80;
 }
 
+/* Hinweis, dass ein Rezept ein Lagerfeuer in der Nähe braucht */
+.recipe-hint {
+  font-size: 12px;
+  color: #ffcc80;
+  margin-bottom: 6px;
+}
+
 .recipe button {
   width: 100%;
   padding: 6px;

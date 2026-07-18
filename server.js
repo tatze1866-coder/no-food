@@ -46,10 +46,17 @@ const CONFIG = {
   // --- Item-/Crafting-System (Claude) -------------------------------
   // Eigener Block, damit er sich nicht mit anderen Änderungen überschneidet.
   capacity: 20,           // Obergrenze pro Item-Sorte im Inventar
+  backpackCapacity: 40,   // Obergrenze mit Rucksack
   woodPerHit: 1,          // Holz pro Baum-Schlag mit bloßer Hand
   stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
   axeWoodBonus: 2,        // Extra-Holz, wenn eine Axt ausgerüstet ist
   pickaxeStoneBonus: 2,   // Extra-Stein, wenn eine Spitzhacke ausgerüstet ist
+  cookedMeatFood: 40,     // Wieviel Hunger gebratenes Fleisch stillt
+
+  // Lagerfeuer
+  campfireBurnTime: 60,   // Sekunden, die ein Lagerfeuer brennt
+  campfireRadius: 130,    // Wirkungsradius (Heilen + Kochen)
+  campfireHeal: 4,        // Heilung pro Sekunde in der Nähe eines Feuers
   // ------------------------------------------------------------------
 };
 
@@ -89,9 +96,18 @@ const ITEMS = {
 // Schritt 1 enthält die drei Werkzeuge. Lagerfeuer, Rucksack und das
 // Koch-Rezept (cooked_meat) kommen in Schritt 2 dazu.
 const RECIPES = {
-  axe:     { name: "Axt",        cost: { wood: 3, stone: 3 }, result: { axe: 1 } },
-  pickaxe: { name: "Spitzhacke", cost: { wood: 3, stone: 5 }, result: { pickaxe: 1 } },
-  spear:   { name: "Speer",      cost: { wood: 5, stone: 5 }, result: { spear: 1 } },
+  axe:      { name: "Axt",        cost: { wood: 3, stone: 3 },  result: { axe: 1 } },
+  pickaxe:  { name: "Spitzhacke", cost: { wood: 3, stone: 5 },  result: { pickaxe: 1 } },
+  spear:    { name: "Speer",      cost: { wood: 5, stone: 5 },  result: { spear: 1 } },
+  campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
+  backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
+  // Kochen: braucht rohes Fleisch (von Tieren, später) UND Nähe zum Lagerfeuer
+  cooked_meat: {
+    name: "Fleisch braten",
+    cost: { raw_meat: 1 },
+    result: { cooked_meat: 1 },
+    requiresNear: "campfire",
+  },
 };
 
 const TICKS_PER_SECOND = 20;   // Wie oft pro Sekunde der Server rechnet
@@ -204,6 +220,22 @@ let nextPlayerId = 1;
 // Busch-Nummern, deren Beerenstand sich seit dem letzten Senden geändert hat
 const changedBushes = new Set();
 
+// ---------- STRUKTUREN (vom Spieler platziert, z.B. Lagerfeuer) ----------
+// Bewusst ein EIGENES Array (nicht `resources`, das ist der Biom-/Karten-Teil),
+// damit sich Lagerfeuer und die Weltressourcen nicht in die Quere kommen.
+let structures = [];
+let nextStructureId = 1;
+
+// Steht an Position x,y ein brennendes Lagerfeuer in Reichweite?
+function nearCampfire(x, y) {
+  for (const s of structures) {
+    if (s.type === "campfire" && dist(x, y, s.x, s.y) <= CONFIG.campfireRadius) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function addPlayer(id, name) {
   players.set(id, {
     id: id,
@@ -241,9 +273,9 @@ function countItem(player, id) {
   return player.inventory[id] || 0;
 }
 
-// Die aktuelle Obergrenze pro Item-Sorte (mit Rucksack höher — Schritt 2)
+// Die aktuelle Obergrenze pro Item-Sorte (mit Rucksack höher)
 function capacityFor(player) {
-  return CONFIG.capacity;
+  return countItem(player, "backpack") > 0 ? CONFIG.backpackCapacity : CONFIG.capacity;
 }
 
 // Ein Item hinzufügen, aber nie über die Obergrenze hinaus.
@@ -273,25 +305,49 @@ function takeItems(player, cost) {
   }
 }
 
-// Eine Beere aus dem Inventar essen
-function eatBerry(player) {
-  if (player.dead) return;
-  if (countItem(player, "berry") > 0 && player.hunger < CONFIG.maxHunger) {
-    takeItems(player, { berry: 1 });
-    player.hunger = clamp(player.hunger + CONFIG.berryFood, 0, CONFIG.maxHunger);
-  }
-}
-
 // Ein Rezept bauen: prüfen, abziehen, Ergebnis gutschreiben
 function craft(player, recipeId) {
   if (player.dead) return;
   const recipe = RECIPES[recipeId];
   if (!recipe) return;
   if (!canAfford(player, recipe.cost)) return;
+  // Manche Rezepte (Kochen) gehen nur in der Nähe eines Lagerfeuers
+  if (recipe.requiresNear === "campfire" && !nearCampfire(player.x, player.y)) return;
 
   takeItems(player, recipe.cost);
   for (const id in recipe.result) {
     giveItem(player, id, recipe.result[id]);
+  }
+}
+
+// Ein Lagerfeuer vor dem Spieler platzieren (verbraucht 1 Lagerfeuer)
+function placeItem(player, itemId) {
+  if (player.dead) return;
+  if (itemId !== "campfire") return;
+  if (countItem(player, "campfire") <= 0) return;
+
+  takeItems(player, { campfire: 1 });
+  // Etwas vor den Spieler setzen (in Blickrichtung)
+  const px = player.x + Math.cos(player.angle) * 50;
+  const py = player.y + Math.sin(player.angle) * 50;
+  structures.push({
+    id: nextStructureId++,
+    type: "campfire",
+    x: Math.round(clamp(px, 0, CONFIG.worldSize)),
+    y: Math.round(clamp(py, 0, CONFIG.worldSize)),
+    fuel: CONFIG.campfireBurnTime,
+  });
+}
+
+// Essen: bevorzugt gebratenes Fleisch (sättigt mehr), sonst eine Beere
+function eat(player) {
+  if (player.dead || player.hunger >= CONFIG.maxHunger) return;
+  if (countItem(player, "cooked_meat") > 0) {
+    takeItems(player, { cooked_meat: 1 });
+    player.hunger = clamp(player.hunger + CONFIG.cookedMeatFood, 0, CONFIG.maxHunger);
+  } else if (countItem(player, "berry") > 0) {
+    takeItems(player, { berry: 1 });
+    player.hunger = clamp(player.hunger + CONFIG.berryFood, 0, CONFIG.maxHunger);
   }
 }
 
@@ -349,9 +405,23 @@ function update(dt) {
       player.health = clamp(player.health + CONFIG.regenRate * dt, 0, CONFIG.maxHealth);
     }
 
+    // Wärme/Heilung durch ein Lagerfeuer in der Nähe (passt später zum Schnee-Biom)
+    if (nearCampfire(player.x, player.y)) {
+      player.health = clamp(player.health + CONFIG.campfireHeal * dt, 0, CONFIG.maxHealth);
+    }
+
     if (player.health <= 0) {
       player.health = 0;
       player.dead = true;
+    }
+  }
+
+  // --- Lagerfeuer brennen herunter; ausgebrannte werden entfernt ---
+  for (let i = structures.length - 1; i >= 0; i--) {
+    const s = structures[i];
+    if (s.type === "campfire") {
+      s.fuel -= dt;
+      if (s.fuel <= 0) structures.splice(i, 1);
     }
   }
 
@@ -423,12 +493,14 @@ function tryHit(player) {
 //   { t: "eat" }                            Beere essen
 //   { t: "craft", recipe: "axe" }           Ein Rezept bauen
 //   { t: "equip", tool: "axe"|null }         Werkzeug ausrüsten / weglegen
+//   { t: "place", item: "campfire" }        Etwas platzieren (Lagerfeuer)
 //   { t: "respawn" }                        Nach dem Tod neu starten
 //
 // Server -> Browser:
 //   { t: "welcome", id, config, items, recipes, world }   Begrüßung + Kataloge
-//   { t: "state", players, bushes }         Spielstand (TICKS_PER_SECOND-mal/s)
-//                 (jeder Spieler: inventory {id->Anzahl} + equipped)
+//   { t: "state", players, bushes, structures }   Spielstand (TICKS_PER_SECOND-mal/s)
+//                 (jeder Spieler: inventory {id->Anzahl} + equipped;
+//                  structures: Lagerfeuer mit x, y, fuelPct)
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
 
 const wss = new WebSocketServer({ server: server, maxPayload: 16 * 1024 });
@@ -477,7 +549,17 @@ function stateMessage() {
   }
   changedBushes.clear();
 
-  return { t: "state", players: playerList, bushes: bushList };
+  // Lagerfeuer sind wenige — der Einfachheit halber alle mitschicken.
+  // fuelPct (0..1) reicht dem Browser für die Flammen-Anzeige.
+  const structureList = structures.map((s) => ({
+    id: s.id,
+    type: s.type,
+    x: s.x,
+    y: s.y,
+    fuelPct: Math.max(0, Math.min(1, s.fuel / CONFIG.campfireBurnTime)),
+  }));
+
+  return { t: "state", players: playerList, bushes: bushList, structures: structureList };
 }
 
 wss.on("connection", (ws) => {
@@ -538,12 +620,14 @@ wss.on("connection", (ws) => {
     } else if (msg.t === "hit") {
       tryHit(player);
     } else if (msg.t === "eat") {
-      eatBerry(player);
+      eat(player);
     } else if (msg.t === "craft") {
       if (typeof msg.recipe === "string") craft(player, msg.recipe);
     } else if (msg.t === "equip") {
       // tool ist entweder ein Item-Name (String) oder null (weglegen)
       if (msg.tool === null || typeof msg.tool === "string") equip(player, msg.tool);
+    } else if (msg.t === "place") {
+      if (typeof msg.item === "string") placeItem(player, msg.item);
     } else if (msg.t === "respawn") {
       if (player.dead) resetPlayer(player);
     }

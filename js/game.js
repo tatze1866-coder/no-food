@@ -59,6 +59,7 @@ window.addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
   if (e.key.toLowerCase() === "e") sendMessage({ t: "eat" });
   if (e.key.toLowerCase() === "c") toggleCraftMenu();
+  if (e.key.toLowerCase() === "f") sendMessage({ t: "place", item: "campfire" });
 });
 window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
@@ -84,7 +85,7 @@ function currentInput() {
 // Nachrichten sind kleine JSON-Objekte. Das Feld "t" sagt, was gemeint ist
 // (die gleiche Liste steht oben in server.js — beide müssen zusammenpassen!).
 //
-// Browser -> Server:  join, input, hit, eat, craft, equip, respawn
+// Browser -> Server:  join, input, hit, eat, craft, equip, place, respawn
 // Server -> Browser:  welcome, state, playerLeft
 
 let ws = null;
@@ -183,6 +184,7 @@ function ownAngle() {
 // Jeder Spieler hat zusätzlich x/y (weich bewegte Anzeige-Position) und
 // tx/ty (Ziel-Position vom Server).
 let resources = [];
+let structures = [];     // Lagerfeuer usw. (vom Server gemeldet)
 const players = new Map();
 
 // Kamera folgt der eigenen Figur
@@ -222,6 +224,9 @@ function applyState(msg) {
       resources[index].shake = 1;
     }
   }
+
+  // Lagerfeuer (kommen komplett in jedem state mit)
+  if (msg.structures) structures = msg.structures;
 }
 
 // ---------- 6. SPIEL-LOGIK ----------
@@ -370,6 +375,14 @@ function buildRecipeMenu() {
     cost.dataset.recipe = id;
     row.appendChild(cost);
 
+    // Hinweis, wenn das Rezept ein Lagerfeuer in der Nähe braucht
+    if (recipe.requiresNear === "campfire") {
+      const hint = document.createElement("div");
+      hint.className = "recipe-hint";
+      hint.textContent = "🔥 nur am Lagerfeuer";
+      row.appendChild(hint);
+    }
+
     // Bauen-Knopf
     const btn = document.createElement("button");
     btn.textContent = "Bauen";
@@ -431,20 +444,60 @@ function render() {
   drawGrid();
   drawWorldBorder();
 
-  // Ressourcen und Spieler nach Y-Position sortieren,
+  // Ressourcen, Lagerfeuer und Spieler nach Y-Position sortieren,
   // damit weiter unten stehende Dinge "davor" gezeichnet werden
-  const drawList = [...resources, ...players.values()];
+  const drawList = [...resources, ...structures, ...players.values()];
   drawList.sort((a, b) => a.y - b.y);
 
   for (const obj of drawList) {
     if (obj.name !== undefined) {
       drawPlayer(obj);
+    } else if (obj.fuelPct !== undefined) {
+      drawStructure(obj);
     } else {
       drawResource(obj);
     }
   }
 
   ctx.restore();
+}
+
+// Ein Lagerfeuer zeichnen: Holzscheite + flackernde Flamme
+function drawStructure(s) {
+  if (s.type !== "campfire") return;
+  const x = s.x, y = s.y;
+
+  // Steinring
+  ctx.fillStyle = "#6d6d6d";
+  ctx.beginPath();
+  ctx.arc(x, y, 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Holzscheite (zwei gekreuzte Balken)
+  ctx.strokeStyle = "#5d4037";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(x - 12, y - 6); ctx.lineTo(x + 12, y + 6);
+  ctx.moveTo(x - 12, y + 6); ctx.lineTo(x + 12, y - 6);
+  ctx.stroke();
+
+  // Flamme flackert mit der Zeit; wird kleiner, wenn das Feuer runterbrennt
+  const flicker = 0.8 + Math.sin(performance.now() / 90 + s.id) * 0.2;
+  const size = (10 + 10 * s.fuelPct) * flicker;
+
+  ctx.fillStyle = "#ff9800";
+  ctx.beginPath();
+  ctx.moveTo(x, y - size * 1.6);
+  ctx.quadraticCurveTo(x + size, y, x, y + size * 0.4);
+  ctx.quadraticCurveTo(x - size, y, x, y - size * 1.6);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffe082";
+  ctx.beginPath();
+  ctx.moveTo(x, y - size);
+  ctx.quadraticCurveTo(x + size * 0.5, y, x, y + size * 0.25);
+  ctx.quadraticCurveTo(x - size * 0.5, y, x, y - size);
+  ctx.fill();
 }
 
 // Leichtes Gitter, damit man die Bewegung sieht
