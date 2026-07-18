@@ -2,17 +2,17 @@
 // no-food — Server (statische Dateien + Multiplayer-Spielserver)
 // ------------------------------------------------------------
 // Der Server ist der „Chef" über das Spiel: Die komplette Logik
-// (Welt, Bewegung, Hunger, Schlagen) läuft HIER. Die Browser der
-// Spieler schicken nur ihre Eingaben und bekommen den Spielstand
-// zurückgeschickt, den sie dann zeichnen.
+// (Welt, Bewegung, Hunger, Schlagen, Tiere, Crafting) läuft HIER.
+// Die Browser der Spieler schicken nur ihre Eingaben und bekommen
+// den Spielstand zurückgeschickt, den sie dann zeichnen.
 //
 // Aufbau dieser Datei:
-//   1. Einstellungen (alle Spielwerte — wie früher im Browser)
+//   1. Einstellungen (alle Spielwerte) + Item-/Rezept-/Tier-Kataloge
 //   2. Hilfsfunktionen
 //   3. Statischer Dateiserver (liefert index.html, style.css, game.js)
-//   4. Welt (Bäume, Steine, Büsche)
-//   5. Spieler-Verwaltung (beitreten, verlassen, essen, respawn)
-//   6. Spiel-Logik (Tick: Bewegung, Schlagen, Hunger, Nachwachsen)
+//   4. Welt (Biome, Ressourcen, Tiere + Tag/Nacht)
+//   5. Spieler-Verwaltung (Inventar, beitreten, essen, crafting, respawn)
+//   6. Spiel-Logik (Tick: Bewegung, Schlagen, Hunger, Tiere, Lagerfeuer)
 //   7. Netzwerk (Nachrichten empfangen und an alle senden)
 //   8. Spiel-Schleife (Server-Tick)
 // ============================================================
@@ -24,7 +24,7 @@ const { WebSocketServer } = require("ws");
 
 // ---------- 1. EINSTELLUNGEN ----------
 const CONFIG = {
-  worldSize: 4000,        // Breite/Höhe der Welt in Pixeln
+  worldSize: 2400,        // Breite/Höhe der Welt in Pixeln
   playerSpeed: 240,       // Bewegungsgeschwindigkeit (Pixel pro Sekunde)
   playerRadius: 24,       // Größe des Spielers
   reach: 65,              // Wie weit der Spieler schlagen kann
@@ -37,21 +37,42 @@ const CONFIG = {
   regenRate: 3,           // Heilung pro Sekunde wenn Hunger über 70
   berryFood: 22,          // Wieviel Hunger eine Beere stillt
 
-  treeCount: 90,          // Anzahl Bäume in der Welt
-  rockCount: 45,          // Anzahl Steine
-  bushCount: 55,          // Anzahl Beerensträucher
+  // Ressourcen-Anzahl pro Biom (die Biome selbst stehen in Abschnitt 4)
+  forestTrees: 50,        // Bäume im Wald (Anfänger-Biom: viel Holz + Essen)
+  forestRocks: 12,        // Steine im Wald
+  forestBushes: 35,       // Beerensträucher im Wald
+  snowTrees: 25,          // Bäume im Schnee (karger, dafür mehr Steine)
+  snowRocks: 25,          // Steine im Schnee
+  snowBushes: 10,         // Beerensträucher im Schnee
+  // Der Ozean bekommt absichtlich keine Ressourcen.
+
   bushBerries: 4,         // Beeren pro Strauch
   berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
 
+  // Tag/Nacht-Wechsel (in Sekunden): nach dayLength Tag kommt nightLength Nacht
+  dayLength: 120,
+  nightLength: 60,
+
+  // Tiere (von Kimi)
+  playerDamage: 20,       // Grundschaden des Spieler-Schlags gegen Tiere
+  rabbitCount: 8,         // Hasen im Wald (neutral, fliehen)
+  spiderCount: 5,         // Spinnen im Wald (nur NACHTS feindlich)
+  wolfCount: 4,           // Wölfe im Wald (immer feindlich)
+  bearCount: 3,           // Eisbären im Schnee (immer feindlich)
+  animalRespawn: 30,      // Sekunden bis ein getötetes Tier neu spawnt
+  aggroRange: 260,        // Ab dieser Entfernung verfolgen feindliche Tiere
+  fleeRange: 150,         // Ab dieser Entfernung fliehen Hasen vor Spielern
+
   // --- Item-/Crafting-System (Claude) -------------------------------
-  // Eigener Block, damit er sich nicht mit anderen Änderungen überschneidet.
   capacity: 20,           // Obergrenze pro Item-Sorte im Inventar
   backpackCapacity: 40,   // Obergrenze mit Rucksack
   woodPerHit: 1,          // Holz pro Baum-Schlag mit bloßer Hand
   stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
   axeWoodBonus: 2,        // Extra-Holz, wenn eine Axt ausgerüstet ist
   pickaxeStoneBonus: 2,   // Extra-Stein, wenn eine Spitzhacke ausgerüstet ist
-  cookedMeatFood: 40,     // Wieviel Hunger gebratenes Fleisch stillt
+  spearDamageBonus: 20,   // Extra-Schaden gegen Tiere mit ausgerüstetem Speer
+  rawMeatFood: 25,        // Hunger durch rohes Fleisch (weniger als gebraten)
+  cookedMeatFood: 40,     // Hunger durch gebratenes Fleisch
 
   // Lagerfeuer
   campfireBurnTime: 60,   // Sekunden, die ein Lagerfeuer brennt
@@ -76,13 +97,12 @@ const ITEMS = {
   pickaxe:     { name: "Spitzhacke",      icon: "⛏️", tool: true },
   spear:       { name: "Speer",           icon: "🔱", tool: true },
 
-  // Für Schritt 2 reserviert (Lagerfeuer & Rucksack)
+  // Platzierbar / Upgrade
   campfire:    { name: "Lagerfeuer",      icon: "🔥" },
   backpack:    { name: "Rucksack",        icon: "🎒" },
 
-  // Platzhalter für spätere Tier-Drops (Spinne, Wolf, Hase, Bär).
-  // Noch nicht erhältlich, aber schon definiert, damit Rezepte und Anzeige
-  // später sofort funktionieren.
+  // Tier-Drops (Fleisch fällt schon von Tieren; Felle/Seide sind Platzhalter
+  // für spätere Rezepte, z.B. warme Kleidung).
   raw_meat:    { name: "Rohes Fleisch",   icon: "🥩" },
   cooked_meat: { name: "Gebratenes Fleisch", icon: "🍖" },
   rabbit_hide: { name: "Hasenfell",       icon: "🐇" },
@@ -93,21 +113,29 @@ const ITEMS = {
 
 // ---------- RECIPES: Crafting-Rezepte ----------
 // Jedes Rezept: was es kostet (cost) und was dabei herauskommt (result).
-// Schritt 1 enthält die drei Werkzeuge. Lagerfeuer, Rucksack und das
-// Koch-Rezept (cooked_meat) kommen in Schritt 2 dazu.
 const RECIPES = {
   axe:      { name: "Axt",        cost: { wood: 3, stone: 3 },  result: { axe: 1 } },
   pickaxe:  { name: "Spitzhacke", cost: { wood: 3, stone: 5 },  result: { pickaxe: 1 } },
   spear:    { name: "Speer",      cost: { wood: 5, stone: 5 },  result: { spear: 1 } },
   campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
   backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
-  // Kochen: braucht rohes Fleisch (von Tieren, später) UND Nähe zum Lagerfeuer
+  // Kochen: braucht rohes Fleisch (von Tieren) UND Nähe zum Lagerfeuer
   cooked_meat: {
     name: "Fleisch braten",
     cost: { raw_meat: 1 },
     result: { cooked_meat: 1 },
     requiresNear: "campfire",
   },
+};
+
+// ---------- Tier-Arten (von Kimi) ----------
+// hostile: "never" = nie feindlich, "night" = nur nachts, "always" = immer.
+// meat = wie viele rohe Fleischstücke ein getötetes Tier fallen lässt.
+const ANIMAL_TYPES = {
+  rabbit: { biome: "forest", speed: 200, health: 20, damage: 0,  meat: 2, radius: 14, hostile: "never"  },
+  spider: { biome: "forest", speed: 220, health: 30, damage: 8,  meat: 1, radius: 14, hostile: "night"  },
+  wolf:   { biome: "forest", speed: 260, health: 40, damage: 10, meat: 2, radius: 18, hostile: "always" },
+  bear:   { biome: "snow",   speed: 230, health: 60, damage: 15, meat: 3, radius: 24, hostile: "always" },
 };
 
 const TICKS_PER_SECOND = 20;   // Wie oft pro Sekunde der Server rechnet
@@ -160,6 +188,43 @@ const server = http.createServer((req, res) => {
 });
 
 // ---------- 4. WELT ----------
+// Die Karte ist in Biome aufgeteilt (Rechtecke, die die Welt lückenlos
+// abdecken). y wächst nach UNTEN — „oben" heißt also kleine y-Werte:
+//   oben komplett:  Schnee (beide oberen Quadranten)
+//   unten links:    Wald (Anfänger-Biom, hier starten die Spieler)
+//   unten rechts:   Ozean (Wasser — darf nicht betreten werden)
+// Die Farbe schickt der Server beim Beitritt an die Browser zum Zeichnen.
+const half = CONFIG.worldSize / 2;
+const BIOMES = [
+  { name: "snow",   color: "#dfe9f2", x: 0,    y: 0,    w: CONFIG.worldSize, h: half },
+  { name: "forest", color: "#4caf50", x: 0,    y: half, w: half, h: half },
+  { name: "ocean",  color: "#1b6ca8", x: half, y: half, w: half, h: half },
+];
+
+// In welchem Biom liegt der Punkt (x, y)?
+function biomeAt(x, y) {
+  for (const biome of BIOMES) {
+    if (x >= biome.x && x < biome.x + biome.w && y >= biome.y && y < biome.y + biome.h) {
+      return biome;
+    }
+  }
+  return BIOMES[0]; // Außerhalb der Welt (sollte nicht vorkommen): Schnee
+}
+
+// Zufälliger Punkt in einem Biom, mit Abstand (margin) zum Biom-Rand
+function randInBiome(biome, margin) {
+  return {
+    x: rand(biome.x + margin, biome.x + biome.w - margin),
+    y: rand(biome.y + margin, biome.y + biome.h - margin),
+  };
+}
+
+// Startpunkt für (neu) beitretende Spieler: Mitte des Wald-Bioms (Anfänger)
+function spawnPoint() {
+  const forest = BIOMES.find((b) => b.name === "forest");
+  return { x: forest.x + forest.w / 2, y: forest.y + forest.h / 2 };
+}
+
 // Jede Ressource ist ein Objekt mit Position, Typ und Größe.
 // Die Position im Array ist gleichzeitig ihre Nummer (Index) —
 // darüber sagt der Server den Browsern, welcher Busch sich geändert hat.
@@ -168,36 +233,77 @@ let resources = [];
 function createWorld() {
   resources = [];
 
-  // Bäume
-  for (let i = 0; i < CONFIG.treeCount; i++) {
-    resources.push({
-      type: "tree",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
-      radius: rand(38, 55),
-    });
+  // Die beiden begehbaren Biome bekommen ihre eigenen Ressourcen
+  const forest = BIOMES.find((b) => b.name === "forest");
+  const snow = BIOMES.find((b) => b.name === "snow");
+
+  // Bäume (Wald + Schnee)
+  for (let i = 0; i < CONFIG.forestTrees + CONFIG.snowTrees; i++) {
+    const biome = i < CONFIG.forestTrees ? forest : snow;
+    const pos = randInBiome(biome, 60);
+    resources.push({ type: "tree", x: pos.x, y: pos.y, radius: rand(38, 55) });
   }
 
-  // Steine
-  for (let i = 0; i < CONFIG.rockCount; i++) {
-    resources.push({
-      type: "rock",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
-      radius: rand(26, 38),
-    });
+  // Steine (Wald + Schnee)
+  for (let i = 0; i < CONFIG.forestRocks + CONFIG.snowRocks; i++) {
+    const biome = i < CONFIG.forestRocks ? forest : snow;
+    const pos = randInBiome(biome, 60);
+    resources.push({ type: "rock", x: pos.x, y: pos.y, radius: rand(26, 38) });
   }
 
-  // Beerensträucher
-  for (let i = 0; i < CONFIG.bushCount; i++) {
+  // Beerensträucher (Wald + Schnee)
+  for (let i = 0; i < CONFIG.forestBushes + CONFIG.snowBushes; i++) {
+    const biome = i < CONFIG.forestBushes ? forest : snow;
+    const pos = randInBiome(biome, 60);
     resources.push({
       type: "bush",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
+      x: pos.x,
+      y: pos.y,
       radius: rand(22, 30),
       berries: CONFIG.bushBerries,
       regrowTimer: 0,
     });
+  }
+
+  spawnAnimals();
+}
+
+// ---------- Tiere (von Kimi) ----------
+// Tiere leben wie Ressourcen in der Welt, bewegen sich aber selbst.
+// worldTime zählt die Sekunden seit Server-Start (für Tag/Nacht).
+let animals = [];
+let nextAnimalId = 1;
+let worldTime = 0;
+
+// Ist gerade Nacht? (Tag und Nacht wechseln sich immer ab)
+function isNight() {
+  const cycle = CONFIG.dayLength + CONFIG.nightLength;
+  return (worldTime % cycle) >= CONFIG.dayLength;
+}
+
+// Die Tiere der Welt erzeugen (pro Art die Anzahl aus der CONFIG)
+function spawnAnimals() {
+  animals = [];
+  for (const species in ANIMAL_TYPES) {
+    const type = ANIMAL_TYPES[species];
+    const biome = BIOMES.find((b) => b.name === type.biome);
+    const count = CONFIG[species + "Count"];
+    for (let i = 0; i < count; i++) {
+      const pos = randInBiome(biome, 80);
+      animals.push({
+        id: nextAnimalId++,
+        species: species,
+        x: pos.x,
+        y: pos.y,
+        angle: rand(0, Math.PI * 2),        // Blick-/Laufrichtung
+        health: type.health,
+        dead: false,
+        respawnTimer: 0,                    // Sekunden bis zum Neu-Spawn (wenn tot)
+        attackTimer: 0,                     // Sperre zwischen zwei Angriffen
+        wanderAngle: rand(0, Math.PI * 2),  // aktuelle Richtung beim Wandern
+        wanderTimer: 0,                     // wann die Richtung wieder wechselt
+      });
+    }
   }
 }
 
@@ -237,11 +343,12 @@ function nearCampfire(x, y) {
 }
 
 function addPlayer(id, name) {
+  const spawn = spawnPoint();
   players.set(id, {
     id: id,
     name: name,
-    x: CONFIG.worldSize / 2,
-    y: CONFIG.worldSize / 2,
+    x: spawn.x,
+    y: spawn.y,
     angle: 0,           // Blickrichtung (zur Maus)
     health: CONFIG.maxHealth,
     hunger: CONFIG.maxHunger,
@@ -256,8 +363,9 @@ function addPlayer(id, name) {
 
 // Nach dem Tod / bei „Nochmal spielen": Werte zurücksetzen
 function resetPlayer(player) {
-  player.x = CONFIG.worldSize / 2;
-  player.y = CONFIG.worldSize / 2;
+  const spawn = spawnPoint();
+  player.x = spawn.x;
+  player.y = spawn.y;
   player.health = CONFIG.maxHealth;
   player.hunger = CONFIG.maxHunger;
   player.inventory = {};
@@ -305,6 +413,22 @@ function takeItems(player, cost) {
   }
 }
 
+// Essen: bevorzugt gebratenes Fleisch (sättigt am meisten), dann rohes
+// Fleisch, sonst eine Beere.
+function eat(player) {
+  if (player.dead || player.hunger >= CONFIG.maxHunger) return;
+  if (countItem(player, "cooked_meat") > 0) {
+    takeItems(player, { cooked_meat: 1 });
+    player.hunger = clamp(player.hunger + CONFIG.cookedMeatFood, 0, CONFIG.maxHunger);
+  } else if (countItem(player, "raw_meat") > 0) {
+    takeItems(player, { raw_meat: 1 });
+    player.hunger = clamp(player.hunger + CONFIG.rawMeatFood, 0, CONFIG.maxHunger);
+  } else if (countItem(player, "berry") > 0) {
+    takeItems(player, { berry: 1 });
+    player.hunger = clamp(player.hunger + CONFIG.berryFood, 0, CONFIG.maxHunger);
+  }
+}
+
 // Ein Rezept bauen: prüfen, abziehen, Ergebnis gutschreiben
 function craft(player, recipeId) {
   if (player.dead) return;
@@ -317,6 +441,18 @@ function craft(player, recipeId) {
   takeItems(player, recipe.cost);
   for (const id in recipe.result) {
     giveItem(player, id, recipe.result[id]);
+  }
+}
+
+// Ein Werkzeug in die Hand nehmen (oder mit null weglegen)
+function equip(player, toolId) {
+  if (toolId === null) {
+    player.equipped = null;
+    return;
+  }
+  // Nur ausrüsten, was ein Werkzeug ist UND im Inventar liegt
+  if (ITEMS[toolId] && ITEMS[toolId].tool && countItem(player, toolId) > 0) {
+    player.equipped = toolId;
   }
 }
 
@@ -339,33 +475,12 @@ function placeItem(player, itemId) {
   });
 }
 
-// Essen: bevorzugt gebratenes Fleisch (sättigt mehr), sonst eine Beere
-function eat(player) {
-  if (player.dead || player.hunger >= CONFIG.maxHunger) return;
-  if (countItem(player, "cooked_meat") > 0) {
-    takeItems(player, { cooked_meat: 1 });
-    player.hunger = clamp(player.hunger + CONFIG.cookedMeatFood, 0, CONFIG.maxHunger);
-  } else if (countItem(player, "berry") > 0) {
-    takeItems(player, { berry: 1 });
-    player.hunger = clamp(player.hunger + CONFIG.berryFood, 0, CONFIG.maxHunger);
-  }
-}
-
-// Ein Werkzeug in die Hand nehmen (oder mit null weglegen)
-function equip(player, toolId) {
-  if (toolId === null) {
-    player.equipped = null;
-    return;
-  }
-  // Nur ausrüsten, was ein Werkzeug ist UND im Inventar liegt
-  if (ITEMS[toolId] && ITEMS[toolId].tool && countItem(player, toolId) > 0) {
-    player.equipped = toolId;
-  }
-}
-
 // ---------- 6. SPIEL-LOGIK ----------
 // Läuft TICKS_PER_SECOND-mal pro Sekunde für alle Spieler zusammen.
 function update(dt) {
+  // Zeit läuft weiter (für den Tag/Nacht-Wechsel)
+  worldTime += dt;
+
   for (const player of players.values()) {
     if (player.dead) continue;
 
@@ -384,8 +499,14 @@ function update(dt) {
       dy *= 0.7071;
     }
 
-    player.x += dx * CONFIG.playerSpeed * dt;
-    player.y += dy * CONFIG.playerSpeed * dt;
+    // Bewegen — aber der Ozean darf nicht betreten werden.
+    // Die beiden Richtungen werden einzeln geprüft, damit der Spieler
+    // am Ufer entlang „rutscht" statt komplett stehen zu bleiben.
+    const nextX = player.x + dx * CONFIG.playerSpeed * dt;
+    if (biomeAt(nextX, player.y).name !== "ocean") player.x = nextX;
+
+    const nextY = player.y + dy * CONFIG.playerSpeed * dt;
+    if (biomeAt(player.x, nextY).name !== "ocean") player.y = nextY;
 
     // Nicht aus der Welt herauslaufen
     player.x = clamp(player.x, CONFIG.playerRadius, CONFIG.worldSize - CONFIG.playerRadius);
@@ -405,7 +526,7 @@ function update(dt) {
       player.health = clamp(player.health + CONFIG.regenRate * dt, 0, CONFIG.maxHealth);
     }
 
-    // Wärme/Heilung durch ein Lagerfeuer in der Nähe (passt später zum Schnee-Biom)
+    // Wärme/Heilung durch ein Lagerfeuer in der Nähe (passt zum Schnee-Biom)
     if (nearCampfire(player.x, player.y)) {
       player.health = clamp(player.health + CONFIG.campfireHeal * dt, 0, CONFIG.maxHealth);
     }
@@ -413,15 +534,6 @@ function update(dt) {
     if (player.health <= 0) {
       player.health = 0;
       player.dead = true;
-    }
-  }
-
-  // --- Lagerfeuer brennen herunter; ausgebrannte werden entfernt ---
-  for (let i = structures.length - 1; i >= 0; i--) {
-    const s = structures[i];
-    if (s.type === "campfire") {
-      s.fuel -= dt;
-      if (s.fuel <= 0) structures.splice(i, 1);
     }
   }
 
@@ -437,9 +549,100 @@ function update(dt) {
       }
     }
   }
+
+  // --- Lagerfeuer brennen herunter; ausgebrannte werden entfernt ---
+  for (let i = structures.length - 1; i >= 0; i--) {
+    const s = structures[i];
+    if (s.type === "campfire") {
+      s.fuel -= dt;
+      if (s.fuel <= 0) structures.splice(i, 1);
+    }
+  }
+
+  // --- Tiere verhalten sich (jagen, fliehen, wandern) ---
+  for (const animal of animals) {
+    updateAnimal(animal, dt);
+  }
 }
 
-// Prüfen ob der Schlag eine Ressource trifft (wie früher im Browser)
+// Ein Tier bewegen — es bleibt dabei immer in seinem eigenen Biom
+function moveAnimal(animal, angle, speed, dt) {
+  const type = ANIMAL_TYPES[animal.species];
+  const biome = BIOMES.find((b) => b.name === type.biome);
+  animal.x += Math.cos(angle) * speed * dt;
+  animal.y += Math.sin(angle) * speed * dt;
+  animal.x = clamp(animal.x, biome.x + type.radius, biome.x + biome.w - type.radius);
+  animal.y = clamp(animal.y, biome.y + type.radius, biome.y + biome.h - type.radius);
+  animal.angle = angle;
+}
+
+// Das Verhalten eines Tiers (wird pro Tick aufgerufen)
+function updateAnimal(animal, dt) {
+  const type = ANIMAL_TYPES[animal.species];
+  const biome = BIOMES.find((b) => b.name === type.biome);
+
+  // Totes Tier: auf das Neu-Spawnen warten
+  if (animal.dead) {
+    animal.respawnTimer -= dt;
+    if (animal.respawnTimer <= 0) {
+      const pos = randInBiome(biome, 80);
+      animal.x = pos.x;
+      animal.y = pos.y;
+      animal.health = type.health;
+      animal.dead = false;
+    }
+    return;
+  }
+
+  animal.attackTimer = Math.max(0, animal.attackTimer - dt);
+
+  // Nächsten lebenden Spieler suchen — aber nur, wenn er im Biom des
+  // Tiers ist (so bleibt der Ozean sicher und Tiere laufen keinem
+  // Spieler über die ganze Karte hinterher)
+  let nearest = null;
+  let nearestDist = Infinity;
+  for (const player of players.values()) {
+    if (player.dead) continue;
+    if (biomeAt(player.x, player.y) !== biome) continue;
+    const d = dist(animal.x, animal.y, player.x, player.y);
+    if (d < nearestDist) {
+      nearest = player;
+      nearestDist = d;
+    }
+  }
+
+  // Ist das Tier gerade feindlich? (Spinnen nur nachts!)
+  const hostile = type.hostile === "always" || (type.hostile === "night" && isNight());
+
+  if (hostile && nearest && nearestDist < CONFIG.aggroRange) {
+    // Feindlich: zum Spieler laufen und beißen
+    const angle = Math.atan2(nearest.y - animal.y, nearest.x - animal.x);
+    if (nearestDist > type.radius + CONFIG.playerRadius) {
+      moveAnimal(animal, angle, type.speed, dt);
+    } else if (animal.attackTimer <= 0) {
+      animal.attackTimer = 1; // eine Sekunde Sperre zwischen zwei Bissen
+      nearest.health -= type.damage;
+      if (nearest.health <= 0) {
+        nearest.health = 0;
+        nearest.dead = true;
+      }
+    }
+  } else if (animal.species === "rabbit" && nearest && nearestDist < CONFIG.fleeRange) {
+    // Hase: vor dem Spieler weglaufen (Gegenrichtung)
+    const angle = Math.atan2(animal.y - nearest.y, animal.x - nearest.x);
+    moveAnimal(animal, angle, type.speed, dt);
+  } else {
+    // Wandern: alle paar Sekunden eine neue Zufallsrichtung, halbes Tempo
+    animal.wanderTimer -= dt;
+    if (animal.wanderTimer <= 0) {
+      animal.wanderTimer = rand(1, 3);
+      animal.wanderAngle = rand(0, Math.PI * 2);
+    }
+    moveAnimal(animal, animal.wanderAngle, type.speed / 2, dt);
+  }
+}
+
+// Prüfen ob der Schlag eine Ressource oder ein Tier trifft
 function tryHit(player) {
   if (player.dead || player.hitTimer > 0) return;
   player.hitTimer = CONFIG.hitCooldown;
@@ -448,9 +651,10 @@ function tryHit(player) {
   const hitX = player.x + Math.cos(player.angle) * CONFIG.reach;
   const hitY = player.y + Math.sin(player.angle) * CONFIG.reach;
 
-  // Die nächste Ressource in Reichweite finden
-  let closest = null;
+  // Das nächste Ziel in Reichweite finden: Ressource ODER Tier
+  let closest = null;        // Ressource
   let closestIndex = -1;
+  let closestAnimal = null;  // Tier
   let closestDist = Infinity;
   for (let i = 0; i < resources.length; i++) {
     const res = resources[i];
@@ -458,8 +662,35 @@ function tryHit(player) {
     if (d < res.radius + 20 && d < closestDist) {
       closest = res;
       closestIndex = i;
+      closestAnimal = null;
       closestDist = d;
     }
+  }
+  for (const animal of animals) {
+    if (animal.dead) continue;
+    const type = ANIMAL_TYPES[animal.species];
+    const d = dist(hitX, hitY, animal.x, animal.y);
+    if (d < type.radius + 20 && d < closestDist) {
+      closestAnimal = animal;
+      closest = null;
+      closestIndex = -1;
+      closestDist = d;
+    }
+  }
+
+  // Ein Tier getroffen: es verliert Leben und lässt rohes Fleisch fallen.
+  // Mit ausgerüstetem Speer richtet der Schlag mehr Schaden an.
+  if (closestAnimal) {
+    const type = ANIMAL_TYPES[closestAnimal.species];
+    let damage = CONFIG.playerDamage;
+    if (player.equipped === "spear") damage += CONFIG.spearDamageBonus;
+    closestAnimal.health -= damage;
+    if (closestAnimal.health <= 0) {
+      closestAnimal.dead = true;
+      closestAnimal.respawnTimer = CONFIG.animalRespawn;
+      giveItem(player, "raw_meat", type.meat);
+    }
+    return;
   }
 
   if (!closest) return;
@@ -490,7 +721,7 @@ function tryHit(player) {
 //   { t: "join", name: "..." }              Spiel beitreten
 //   { t: "input", up, down, left, right, angle }   Tasten + Blickrichtung
 //   { t: "hit" }                            Schlagen
-//   { t: "eat" }                            Beere essen
+//   { t: "eat" }                            Essen (Fleisch/Beere)
 //   { t: "craft", recipe: "axe" }           Ein Rezept bauen
 //   { t: "equip", tool: "axe"|null }         Werkzeug ausrüsten / weglegen
 //   { t: "place", item: "campfire" }        Etwas platzieren (Lagerfeuer)
@@ -498,9 +729,10 @@ function tryHit(player) {
 //
 // Server -> Browser:
 //   { t: "welcome", id, config, items, recipes, world }   Begrüßung + Kataloge
-//   { t: "state", players, bushes, structures }   Spielstand (TICKS_PER_SECOND-mal/s)
-//                 (jeder Spieler: inventory {id->Anzahl} + equipped;
-//                  structures: Lagerfeuer mit x, y, fuelPct)
+//                 (config enthält u.a. biomes für den Hintergrund)
+//   { t: "state", players, bushes, animals, night, structures }
+//                 Spielstand (TICKS_PER_SECOND-mal/s); jeder Spieler mit
+//                 inventory {id->Anzahl} + equipped
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
 
 const wss = new WebSocketServer({ server: server, maxPayload: 16 * 1024 });
@@ -549,6 +781,20 @@ function stateMessage() {
   }
   changedBushes.clear();
 
+  // Nur lebende Tiere mitschicken (tote tauchen erst nach dem Respawn wieder auf)
+  const animalList = [];
+  for (const a of animals) {
+    if (a.dead) continue;
+    animalList.push({
+      id: a.id,
+      species: a.species,
+      x: Math.round(a.x),
+      y: Math.round(a.y),
+      angle: Math.round(a.angle * 100) / 100,
+      radius: ANIMAL_TYPES[a.species].radius,
+    });
+  }
+
   // Lagerfeuer sind wenige — der Einfachheit halber alle mitschicken.
   // fuelPct (0..1) reicht dem Browser für die Flammen-Anzeige.
   const structureList = structures.map((s) => ({
@@ -559,7 +805,14 @@ function stateMessage() {
     fuelPct: Math.max(0, Math.min(1, s.fuel / CONFIG.campfireBurnTime)),
   }));
 
-  return { t: "state", players: playerList, bushes: bushList, structures: structureList };
+  return {
+    t: "state",
+    players: playerList,
+    bushes: bushList,
+    animals: animalList,
+    night: isNight(),
+    structures: structureList,
+  };
 }
 
 wss.on("connection", (ws) => {
@@ -596,6 +849,7 @@ wss.on("connection", (ws) => {
           maxHealth: CONFIG.maxHealth,
           maxHunger: CONFIG.maxHunger,
           capacity: CONFIG.capacity,
+          biomes: BIOMES,   // Biom-Rechtecke inkl. Farbe (zum Zeichnen + Minimap)
         },
         items: ITEMS,        // Katalog: Namen + Icons aller Items
         recipes: RECIPES,    // Alle Crafting-Rezepte für das Menü

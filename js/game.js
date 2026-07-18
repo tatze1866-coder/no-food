@@ -2,18 +2,18 @@
 // no-food — Browser-Client (Eingabe + Zeichnen)
 // ------------------------------------------------------------
 // Der Server (server.js) ist der „Chef" über das Spiel: Er rechnet
-// Bewegung, Hunger und Schläge. Diese Datei hier schickt nur die
-// Eingaben des Spielers zum Server und zeichnet den Spielstand,
-// der zurückkommt (für ALLE Spieler in derselben Welt).
+// Bewegung, Hunger, Schläge, Tiere und Crafting. Diese Datei hier
+// schickt nur die Eingaben des Spielers zum Server und zeichnet den
+// Spielstand, der zurückkommt (für ALLE Spieler in derselben Welt).
 //
 // Aufbau dieser Datei:
-//   1. Einstellungen (Anzeige-Werte, kommen beim Beitritt vom Server)
+//   1. Einstellungen + Kataloge (kommen beim Beitritt vom Server)
 //   2. Hilfsfunktionen
 //   3. Eingabe (Tastatur + Maus)
 //   4. Netzwerk (WebSocket: senden und empfangen)
-//   5. Spielstand (Welt + Spieler, wie der Server sie meldet)
-//   6. Spiel-Logik (Update: sanfte Bewegung, Kamera, Anzeige)
-//   7. Zeichnen (Render)
+//   5. Spielstand (Welt + Tiere + Lagerfeuer + Spieler)
+//   6. Spiel-Logik (Update: sanfte Bewegung, Kamera, Anzeige, Crafting-Menü)
+//   7. Zeichnen (Render + Minimap)
 //   8. Spiel-Schleife
 // ============================================================
 
@@ -21,13 +21,14 @@
 // Startwerte für die Anzeige. Beim Beitritt ("welcome") schickt der
 // Server die echten Werte — damit Server und Browser immer gleich sind.
 const CONFIG = {
-  worldSize: 4000,
+  worldSize: 2400,
   playerRadius: 24,
   reach: 65,
   hitCooldown: 0.4,
   maxHealth: 100,
   maxHunger: 100,
   capacity: 20,
+  biomes: [],   // Biom-Rechtecke inkl. Farbe — kommen beim Beitritt vom Server
 };
 
 // Kataloge vom Server (kommen beim Beitritt in der "welcome"-Nachricht):
@@ -86,7 +87,8 @@ function currentInput() {
 // (die gleiche Liste steht oben in server.js — beide müssen zusammenpassen!).
 //
 // Browser -> Server:  join, input, hit, eat, craft, equip, place, respawn
-// Server -> Browser:  welcome, state, playerLeft
+// Server -> Browser:  welcome (inkl. Kataloge + Biome), state (inkl. Tiere,
+//                     Tag/Nacht, Lagerfeuer), playerLeft
 
 let ws = null;
 let joined = false;       // Sind wir im Spiel (welcome erhalten)?
@@ -119,7 +121,7 @@ ws.addEventListener("message", (event) => {
   if (msg.t === "welcome") {
     // Beitritt bestätigt: eigene Nummer, echte Einstellungen und die Welt
     myId = msg.id;
-    Object.assign(CONFIG, msg.config);
+    Object.assign(CONFIG, msg.config);   // enthält auch biomes
     ITEMS = msg.items || {};
     RECIPES = msg.recipes || {};
     resources = msg.world;
@@ -180,12 +182,13 @@ function ownAngle() {
 }
 
 // ---------- 5. SPIELSTAND ----------
-// Die Welt und die Spieler, so wie der Server sie zuletzt gemeldet hat.
-// Jeder Spieler hat zusätzlich x/y (weich bewegte Anzeige-Position) und
-// tx/ty (Ziel-Position vom Server).
+// Die Welt, die Tiere, die Lagerfeuer und die Spieler, so wie der Server
+// sie zuletzt gemeldet hat. Spieler und Tiere haben zusätzlich x/y (weich
+// bewegte Anzeige-Position) und tx/ty (Ziel-Position vom Server).
 let resources = [];
-let structures = [];     // Lagerfeuer usw. (vom Server gemeldet)
+let structures = [];      // Lagerfeuer usw. (vom Server gemeldet)
 const players = new Map();
+const animals = new Map();
 
 // Kamera folgt der eigenen Figur
 const camera = { x: 0, y: 0 };
@@ -194,6 +197,8 @@ const camera = { x: 0, y: 0 };
 let punchAnim = 0;        // Animations-Fortschritt des eigenen Schlags (0 bis 1)
 let localHitTimer = 0;    // Sperre, damit Schläge nicht gespammt werden
 let deathShown = false;   // Ist der Todes-Bildschirm gerade sichtbar?
+let isNight = false;      // Sagt der Server gerade Nacht ist
+let nightAlpha = 0;       // Stärke der Nacht-Abdunklung (wird sanft bewegt)
 
 // Neuen Spielstand vom Server übernehmen
 function applyState(msg) {
@@ -205,6 +210,7 @@ function applyState(msg) {
       players.set(p.id, entry);
     }
     // Ziel-Position und alle anderen Werte übernehmen
+    entry.id = p.id;
     entry.tx = p.x;
     entry.ty = p.y;
     entry.name = p.name;
@@ -216,6 +222,29 @@ function applyState(msg) {
     entry.dead = p.dead;
     entry.survivalTime = p.survivalTime;
   }
+
+  // Tiere: genauso wie die Spieler weich bewegt (x/y Anzeige, tx/ty Ziel)
+  const seen = new Set();
+  for (const a of msg.animals) {
+    seen.add(a.id);
+    let entry = animals.get(a.id);
+    if (!entry) {
+      entry = { x: a.x, y: a.y, tx: a.x, ty: a.y, shake: 0 };
+      animals.set(a.id, entry);
+    }
+    entry.tx = a.x;
+    entry.ty = a.y;
+    entry.species = a.species;
+    entry.angle = a.angle;
+    entry.radius = a.radius;
+  }
+  // Tiere, die der Server nicht mehr schickt (getötet), hier entfernen
+  for (const id of animals.keys()) {
+    if (!seen.has(id)) animals.delete(id);
+  }
+
+  // Tag oder Nacht?
+  isNight = msg.night === true;
 
   // Geänderte Büsche: neue Beeren-Zahl + kurz wackeln
   for (const [index, berries] of msg.bushes) {
@@ -254,11 +283,22 @@ function update(dt) {
     p.x += (p.tx - p.x) * schritt;
     p.y += (p.ty - p.y) * schritt;
   }
+  // Tiere genauso weich bewegen
+  for (const a of animals.values()) {
+    const schritt = Math.min(1, dt * 12);
+    a.x += (a.tx - a.x) * schritt;
+    a.y += (a.ty - a.y) * schritt;
+    a.shake = Math.max(0, a.shake - dt * 3);
+  }
 
   // --- Wackel-Animation der Ressourcen abklingen lassen ---
   for (const res of resources) {
     res.shake = Math.max(0, res.shake - dt * 3);
   }
+
+  // --- Nacht-Abdunklung sanft ein-/ausblenden ---
+  const nightTarget = isNight ? 0.45 : 0;
+  nightAlpha += (nightTarget - nightAlpha) * Math.min(1, dt * 2);
 
   // --- Kamera folgt der eigenen Figur ---
   if (me) {
@@ -271,7 +311,7 @@ function update(dt) {
 }
 
 // Wackel-Animation beim eigenen Schlag sofort anzeigen, ohne auf den
-// Server zu warten (sucht wie der Server die nächste Ressource).
+// Server zu warten (sucht wie der Server das nächste Ziel: Ressource oder Tier).
 function predictShake(me) {
   const hitX = me.x + Math.cos(ownAngle()) * CONFIG.reach;
   const hitY = me.y + Math.sin(ownAngle()) * CONFIG.reach;
@@ -285,10 +325,18 @@ function predictShake(me) {
       closestDist = d;
     }
   }
+  // Auch Tiere können getroffen werden
+  for (const a of animals.values()) {
+    const d = Math.hypot(hitX - a.x, hitY - a.y);
+    if (d < a.radius + 20 && d < closestDist) {
+      closest = a;
+      closestDist = d;
+    }
+  }
   if (closest) closest.shake = 1;
 }
 
-// Anzeige (Inventar + Balken + Spielerzahl) aktualisieren
+// Anzeige (Balken + Inventar + Spielerzahl) aktualisieren
 function updateHUD(me) {
   if (me) {
     const healthPct = (me.health / CONFIG.maxHealth) * 100;
@@ -434,9 +482,12 @@ function updateDeathScreen(me) {
 
 // ---------- 7. ZEICHNEN ----------
 function render() {
-  // Hintergrund (Gras)
-  ctx.fillStyle = "#4caf50";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Hintergrund: jedes Biom als Farb-Rechteck (die Liste kam vom Server).
+  // Die Kamera bleibt immer innerhalb der Welt, darum reicht das als Füllung.
+  for (const b of CONFIG.biomes) {
+    ctx.fillStyle = b.color;
+    ctx.fillRect(b.x - camera.x, b.y - camera.y, b.w, b.h);
+  }
 
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
@@ -444,14 +495,16 @@ function render() {
   drawGrid();
   drawWorldBorder();
 
-  // Ressourcen, Lagerfeuer und Spieler nach Y-Position sortieren,
+  // Ressourcen, Lagerfeuer, Tiere und Spieler nach Y-Position sortieren,
   // damit weiter unten stehende Dinge "davor" gezeichnet werden
-  const drawList = [...resources, ...structures, ...players.values()];
+  const drawList = [...resources, ...structures, ...animals.values(), ...players.values()];
   drawList.sort((a, b) => a.y - b.y);
 
   for (const obj of drawList) {
     if (obj.name !== undefined) {
       drawPlayer(obj);
+    } else if (obj.species !== undefined) {
+      drawAnimal(obj);
     } else if (obj.fuelPct !== undefined) {
       drawStructure(obj);
     } else {
@@ -461,129 +514,14 @@ function render() {
 
   ctx.restore();
 
-  // Die Minimap liegt fest in der Ecke (Bildschirm-Ebene), daher NACH restore()
+  // Nacht: dunkle Fläche über die ganze Szene legen
+  if (nightAlpha > 0.01) {
+    ctx.fillStyle = "rgba(10, 10, 40, " + nightAlpha + ")";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Die Minimap liegt fest in der Ecke (Bildschirm-Ebene), daher zuletzt
   drawMinimap();
-}
-
-// ---------- MINIMAP ----------
-// Kleine Übersichtskarte unten rechts. Sie zeigt die Biome, die Lagerfeuer,
-// alle Mitspieler und die eigene Position. Für die Biome nutzt sie dieselbe
-// Liste (CONFIG.biomes), die auch den Hintergrund färbt — sobald die Biome im
-// Spiel sind, erscheinen sie hier automatisch, ohne weitere Änderung.
-const MINIMAP_SIZE = 160;    // Kantenlänge in Pixeln
-const MINIMAP_MARGIN = 12;   // Abstand zum Bildschirmrand
-
-// Eine Welt-Position (0..worldSize) auf einen Punkt in der Minimap umrechnen
-function worldToMinimap(wx, wy, x0, y0, scale) {
-  return { x: x0 + wx * scale, y: y0 + wy * scale };
-}
-
-function drawMinimap() {
-  if (!joined) return;
-
-  const size = MINIMAP_SIZE;
-  const x0 = canvas.width - size - MINIMAP_MARGIN;
-  const y0 = canvas.height - size - MINIMAP_MARGIN;
-  const scale = size / CONFIG.worldSize;
-
-  ctx.save();
-
-  // Dunkler Rahmen hinter der Karte
-  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-  ctx.fillRect(x0 - 2, y0 - 2, size + 4, size + 4);
-
-  // Auf das Karten-Quadrat beschränken, damit nichts übersteht
-  ctx.beginPath();
-  ctx.rect(x0, y0, size, size);
-  ctx.clip();
-
-  // Biome zeichnen (oder ein neutraler Hintergrund, solange es noch keine gibt)
-  if (CONFIG.biomes && CONFIG.biomes.length > 0) {
-    for (const b of CONFIG.biomes) {
-      ctx.fillStyle = b.color;
-      ctx.fillRect(x0 + b.x * scale, y0 + b.y * scale, b.w * scale, b.h * scale);
-    }
-  } else {
-    ctx.fillStyle = "#3d8b3d";
-    ctx.fillRect(x0, y0, size, size);
-  }
-
-  // Lagerfeuer als kleine orange Punkte
-  for (const s of structures) {
-    const p = worldToMinimap(s.x, s.y, x0, y0, scale);
-    ctx.fillStyle = "#ff9800";
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Mitspieler als weiße Punkte (tote leicht durchscheinend)
-  for (const [id, player] of players) {
-    if (id === myId) continue;
-    const p = worldToMinimap(player.tx, player.ty, x0, y0, scale);
-    ctx.fillStyle = player.dead ? "rgba(255, 255, 255, 0.35)" : "#ffffff";
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Die eigene Figur zuletzt: größerer gelber Punkt mit schwarzem Rand
-  const me = players.get(myId);
-  if (me) {
-    const p = worldToMinimap(me.x, me.y, x0, y0, scale);
-    ctx.fillStyle = "#ffd54f";
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  ctx.restore();
-
-  // Weiße Rahmenlinie über der Karte
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x0, y0, size, size);
-}
-
-// Ein Lagerfeuer zeichnen: Holzscheite + flackernde Flamme
-function drawStructure(s) {
-  if (s.type !== "campfire") return;
-  const x = s.x, y = s.y;
-
-  // Steinring
-  ctx.fillStyle = "#6d6d6d";
-  ctx.beginPath();
-  ctx.arc(x, y, 20, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Holzscheite (zwei gekreuzte Balken)
-  ctx.strokeStyle = "#5d4037";
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(x - 12, y - 6); ctx.lineTo(x + 12, y + 6);
-  ctx.moveTo(x - 12, y + 6); ctx.lineTo(x + 12, y - 6);
-  ctx.stroke();
-
-  // Flamme flackert mit der Zeit; wird kleiner, wenn das Feuer runterbrennt
-  const flicker = 0.8 + Math.sin(performance.now() / 90 + s.id) * 0.2;
-  const size = (10 + 10 * s.fuelPct) * flicker;
-
-  ctx.fillStyle = "#ff9800";
-  ctx.beginPath();
-  ctx.moveTo(x, y - size * 1.6);
-  ctx.quadraticCurveTo(x + size, y, x, y + size * 0.4);
-  ctx.quadraticCurveTo(x - size, y, x, y - size * 1.6);
-  ctx.fill();
-
-  ctx.fillStyle = "#ffe082";
-  ctx.beginPath();
-  ctx.moveTo(x, y - size);
-  ctx.quadraticCurveTo(x + size * 0.5, y, x, y + size * 0.25);
-  ctx.quadraticCurveTo(x - size * 0.5, y, x, y - size);
-  ctx.fill();
 }
 
 // Leichtes Gitter, damit man die Bewegung sieht
@@ -671,6 +609,138 @@ function drawResource(res) {
   }
 }
 
+// Ein Lagerfeuer zeichnen: Holzscheite + flackernde Flamme
+function drawStructure(s) {
+  if (s.type !== "campfire") return;
+  const x = s.x, y = s.y;
+
+  // Steinring
+  ctx.fillStyle = "#6d6d6d";
+  ctx.beginPath();
+  ctx.arc(x, y, 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Holzscheite (zwei gekreuzte Balken)
+  ctx.strokeStyle = "#5d4037";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(x - 12, y - 6); ctx.lineTo(x + 12, y + 6);
+  ctx.moveTo(x - 12, y + 6); ctx.lineTo(x + 12, y - 6);
+  ctx.stroke();
+
+  // Flamme flackert mit der Zeit; wird kleiner, wenn das Feuer runterbrennt
+  const flicker = 0.8 + Math.sin(performance.now() / 90 + s.id) * 0.2;
+  const size = (10 + 10 * s.fuelPct) * flicker;
+
+  ctx.fillStyle = "#ff9800";
+  ctx.beginPath();
+  ctx.moveTo(x, y - size * 1.6);
+  ctx.quadraticCurveTo(x + size, y, x, y + size * 0.4);
+  ctx.quadraticCurveTo(x - size, y, x, y - size * 1.6);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffe082";
+  ctx.beginPath();
+  ctx.moveTo(x, y - size);
+  ctx.quadraticCurveTo(x + size * 0.5, y, x, y + size * 0.25);
+  ctx.quadraticCurveTo(x - size * 0.5, y, x, y - size);
+  ctx.fill();
+}
+
+// Ein Tier zeichnen (Hase, Spinne, Wolf, Eisbär).
+// Alle Tiere schauen in ihre Laufrichtung (angle), wie die Spieler.
+function drawAnimal(a) {
+  // Wackel-Effekt beim Treffer (wie bei den Ressourcen)
+  const shakeX = a.shake > 0 ? Math.sin(a.shake * 30) * 4 : 0;
+
+  ctx.save();
+  ctx.translate(a.x + shakeX, a.y);
+  ctx.rotate(a.angle || 0);
+  ctx.lineWidth = 3;
+
+  const r = a.radius;
+
+  if (a.species === "rabbit") {
+    // Ohren (hinten, oben und unten)
+    ctx.fillStyle = "#d7b98a";
+    ctx.strokeStyle = "#8d6e42";
+    ctx.beginPath();
+    ctx.arc(-r * 0.7, -r * 0.6, r * 0.35, 0, Math.PI * 2);
+    ctx.arc(-r * 0.7, r * 0.6, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Körper
+    ctx.fillStyle = "#c8a165";
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (a.species === "spider") {
+    // Beine (Striche nach allen Seiten)
+    ctx.strokeStyle = "#3e2723";
+    for (let i = 0; i < 8; i++) {
+      const legAngle = (i / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(legAngle) * r * 0.5, Math.sin(legAngle) * r * 0.5);
+      ctx.lineTo(Math.cos(legAngle) * r * 1.7, Math.sin(legAngle) * r * 1.7);
+      ctx.stroke();
+    }
+    // Körper
+    ctx.fillStyle = "#4e342e";
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Rote Augen (vorne)
+    ctx.fillStyle = "#e53935";
+    ctx.beginPath();
+    ctx.arc(r * 0.5, -r * 0.3, 3, 0, Math.PI * 2);
+    ctx.arc(r * 0.5, r * 0.3, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (a.species === "wolf") {
+    // Ohren (hinten)
+    ctx.fillStyle = "#78909c";
+    ctx.strokeStyle = "#455a64";
+    ctx.beginPath();
+    ctx.arc(-r * 0.4, -r * 0.8, r * 0.3, 0, Math.PI * 2);
+    ctx.arc(-r * 0.4, r * 0.8, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Körper
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Schnauze (vorne)
+    ctx.fillStyle = "#b0bec5";
+    ctx.beginPath();
+    ctx.arc(r * 0.85, 0, r * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (a.species === "bear") {
+    // Ohren (hinten)
+    ctx.fillStyle = "#eceff1";
+    ctx.strokeStyle = "#90a4ae";
+    ctx.beginPath();
+    ctx.arc(-r * 0.3, -r * 0.8, r * 0.3, 0, Math.PI * 2);
+    ctx.arc(-r * 0.3, r * 0.8, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Körper
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Schnauze (vorne)
+    ctx.fillStyle = "#cfd8dc";
+    ctx.beginPath();
+    ctx.arc(r * 0.8, 0, r * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawPlayer(p) {
   const r = CONFIG.playerRadius;
 
@@ -731,6 +801,97 @@ function drawPlayer(p) {
   ctx.fillStyle = "#ffffff";
   ctx.fillText(p.name, p.x, p.y - r - 12);
   ctx.restore();
+}
+
+// ---------- MINIMAP ----------
+// Kleine Übersichtskarte unten rechts. Sie zeigt die Biome, die Lagerfeuer,
+// die Tiere, alle Mitspieler und die eigene Position. Für die Biome nutzt sie
+// dieselbe Liste (CONFIG.biomes), die auch den Hintergrund färbt.
+const MINIMAP_SIZE = 160;    // Kantenlänge in Pixeln
+const MINIMAP_MARGIN = 12;   // Abstand zum Bildschirmrand
+
+// Eine Welt-Position (0..worldSize) auf einen Punkt in der Minimap umrechnen
+function worldToMinimap(wx, wy, x0, y0, scale) {
+  return { x: x0 + wx * scale, y: y0 + wy * scale };
+}
+
+function drawMinimap() {
+  if (!joined) return;
+
+  const size = MINIMAP_SIZE;
+  const x0 = canvas.width - size - MINIMAP_MARGIN;
+  const y0 = canvas.height - size - MINIMAP_MARGIN;
+  const scale = size / CONFIG.worldSize;
+
+  ctx.save();
+
+  // Dunkler Rahmen hinter der Karte
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.fillRect(x0 - 2, y0 - 2, size + 4, size + 4);
+
+  // Auf das Karten-Quadrat beschränken, damit nichts übersteht
+  ctx.beginPath();
+  ctx.rect(x0, y0, size, size);
+  ctx.clip();
+
+  // Biome zeichnen (oder ein neutraler Hintergrund, solange es noch keine gibt)
+  if (CONFIG.biomes && CONFIG.biomes.length > 0) {
+    for (const b of CONFIG.biomes) {
+      ctx.fillStyle = b.color;
+      ctx.fillRect(x0 + b.x * scale, y0 + b.y * scale, b.w * scale, b.h * scale);
+    }
+  } else {
+    ctx.fillStyle = "#3d8b3d";
+    ctx.fillRect(x0, y0, size, size);
+  }
+
+  // Tiere als kleine rötliche Punkte (grobe Gefahren-/Beute-Übersicht)
+  for (const a of animals.values()) {
+    const p = worldToMinimap(a.tx, a.ty, x0, y0, scale);
+    ctx.fillStyle = "rgba(200, 60, 60, 0.9)";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Lagerfeuer als kleine orange Punkte
+  for (const s of structures) {
+    const p = worldToMinimap(s.x, s.y, x0, y0, scale);
+    ctx.fillStyle = "#ff9800";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Mitspieler als weiße Punkte (tote leicht durchscheinend)
+  for (const [id, player] of players) {
+    if (id === myId) continue;
+    const p = worldToMinimap(player.tx, player.ty, x0, y0, scale);
+    ctx.fillStyle = player.dead ? "rgba(255, 255, 255, 0.35)" : "#ffffff";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Die eigene Figur zuletzt: größerer gelber Punkt mit schwarzem Rand
+  const me = players.get(myId);
+  if (me) {
+    const p = worldToMinimap(me.x, me.y, x0, y0, scale);
+    ctx.fillStyle = "#ffd54f";
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // Weiße Rahmenlinie über der Karte
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x0, y0, size, size);
 }
 
 // ---------- 8. SPIEL-SCHLEIFE ----------
