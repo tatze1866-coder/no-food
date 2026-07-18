@@ -716,27 +716,32 @@ function drawStructure(s) {
 }
 
 // Ein Tier zeichnen (Hase, Spinne, Wolf, Eisbär).
-// Alle Tiere schauen in ihre Laufrichtung (angle), wie die Spieler.
+// Die Sprite-Tiere (Hase, Spinne, Wolf) bleiben aufrecht und spiegeln sich
+// nur nach links/rechts, je nachdem wohin sie gerade laufen — eine volle
+// Drehung würde bei diesen frontal gezeichneten Icons komisch aussehen.
+// Der Eisbär wird weiterhin klassisch gezeichnet und dreht sich komplett.
 function drawAnimal(a) {
   // Wackel-Effekt beim Treffer (wie bei den Ressourcen)
   const shakeX = a.shake > 0 ? Math.sin(a.shake * 30) * 4 : 0;
 
   ctx.save();
   ctx.translate(a.x + shakeX, a.y);
-  ctx.rotate(a.angle || 0);
   ctx.lineWidth = 3;
 
   const r = a.radius;
 
   if (a.species === "rabbit" || a.species === "spider" || a.species === "wolf") {
+    // Nach links oder rechts spiegeln, je nach Laufrichtung (kein Kippen)
+    const facingLeft = Math.cos(a.angle || 0) < 0;
+    if (facingLeft) ctx.scale(-1, 1);
+
     // Sprite-Bild verwenden (ersetzt die frühere Vektor-Zeichnung)
     const img = animalImages[a.species];
-    const size = r * 2.6; // Sprite etwas größer als der Kollisionsradius zeichnen
+    const size = r * 6.5; // Sprite deutlich größer als der Kollisionsradius zeichnen (2.5x von vorher)
     if (img && img.complete && img.naturalWidth > 0) {
       const aspect = img.naturalWidth / img.naturalHeight;
       const h = size;
       const w = size * aspect;
-      // Bild schaut per Default nach rechts (in Laufrichtung 0), passend zu ctx.rotate(a.angle)
       ctx.drawImage(img, -w / 2, -h / 2, w, h);
     } else {
       // Fallback, solange das Bild noch lädt: einfacher Kreis
@@ -746,6 +751,7 @@ function drawAnimal(a) {
       ctx.fill();
     }
   } else if (a.species === "bear") {
+    ctx.rotate(a.angle || 0);
     // Ohren (hinten)
     ctx.fillStyle = "#eceff1";
     ctx.strokeStyle = "#90a4ae";
