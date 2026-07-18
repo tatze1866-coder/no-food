@@ -14,6 +14,29 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
   essen, Lagerfeuer platzieren.
 - `eat`-Nachricht akzeptiert optional `item` (gezielt dieses Essen essen);
   `ITEMS` markiert Essbares mit `food: true`.
+- **Neue Rohstoffe Gold und Diamant**: **Goldadern** kommen in Wald und
+  Schnee vor (100 bzw. 150, `forestGold`/`snowGold` in `CONFIG`),
+  **Diamanten** nur im Schneegebiet (70, `snowDiamond`). Mit bloßer Hand
+  geben sie 1 pro Schlag (`goldPerHit`/`diamondPerHit`).
+- **Werkzeug-Stufenbaum**: **Axt** und **Spitzhacke** gibt es jetzt in vier
+  Stufen — **Holz → Stein → Gold → Diamant** (Stufen-Map `TOOLS` mit `kind`
+  und `tier` 1–4); sie lösen die bisherigen Einzel-Werkzeuge ab. Jede Stufe
+  kostet ihre Rohstoffe **plus das Werkzeug der Vorstufe**, das als Zutat
+  verbraucht und dabei aus der Hand gelegt wird (`craft()`). Die 8 neuen
+  Rezepte in `RECIPES`: Holzaxt/Holzspitzhacke je 3 Holz; Steinaxt 2 Holz +
+  3 Stein + Holzaxt, Steinspitzhacke 2 Holz + 4 Stein + Holzspitzhacke;
+  Goldaxt 3 Gold + 2 Stein + Steinaxt, Goldspitzhacke 4 Gold + 2 Stein +
+  Steinspitzhacke; Diamantaxt 3 Diamant + 2 Gold + Goldaxt,
+  Diamantspitzhacke 4 Diamant + 2 Gold + Goldspitzhacke.
+- **Ertrag pro Schlag steigt mit der Stufe** (`tryHit()`): Die Holzaxt gibt
+  3 Holz pro Schlag wie bisher, jede weitere Axt-Stufe +2 (`axeWoodBonus`,
+  also 3/5/7/9); die Spitzhacke analog +2 Stein pro Stufe
+  (`pickaxeStoneBonus`, 3/5/7/9) sowie +1 Gold bzw. Diamant pro Stufe
+  (`pickaxeGoldBonus`/`pickaxeDiamondBonus`, 2/3/4/5).
+- **Neue Items**: Gold 🪙 und Diamant 💎 sowie die 8 Werkzeug-Items
+  (`wood_axe` … `diamond_pickaxe`) im `ITEMS`-Katalog.
+- **Hotbar-Tooltip** zeigt den Item-Namen (Werkzeug-Slots: „Name — Klicken
+  zum Ausrüsten").
 
 ### Geändert
 - **Karte stark vergrößert**: von 2400×2400 auf **36000×36000** (15× Kantenlänge).

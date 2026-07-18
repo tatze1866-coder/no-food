@@ -426,7 +426,7 @@ function updateInventory(me) {
       if (item.tool) {
         slot.classList.add("tool");
         if (me.equipped === id) slot.classList.add("equipped");
-        slot.title = "Klicken zum Ausrüsten";
+        slot.title = item.name + " — Klicken zum Ausrüsten";
         slot.addEventListener("click", () => {
           sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
         });
@@ -641,6 +641,49 @@ function drawResource(res) {
     ctx.fillStyle = "#757575";
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (res.type === "gold") {
+    // Goldader: wie der Stein, nur golden
+    ctx.fillStyle = "#f2b705";
+    ctx.strokeStyle = "#a67c00";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Kleine helle Einschlüsse in der Ader
+    ctx.fillStyle = "#ffe082";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (res.type === "diamond") {
+    // Diamant-Kristall: wie der Stein, nur eisblau
+    ctx.fillStyle = "#4dd0e1";
+    ctx.strokeStyle = "#00838f";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Kleine helle Einschlüsse im Kristall
+    ctx.fillStyle = "#b2ebf2";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    // Helle Raute in der Mitte als Erkennungszeichen
+    const r = res.radius * 0.35;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
     ctx.fill();
   } else if (res.type === "bush") {
     // Strauch

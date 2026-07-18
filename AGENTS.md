@@ -6,7 +6,8 @@ Dieser Leitfaden richtet sich an KI-Coding-Agenten, die im Projekt **no-food** a
 
 **no-food** ist ein kleines 2D-Überlebensspiel im Browser, inspiriert von
 [Starve.io](https://starve.io). Der Spieler sammelt Ressourcen (Holz, Stein,
-Beeren), muss seinen Hunger stillen und so lange wie möglich überleben.
+Gold, Diamant, Beeren), muss seinen Hunger stillen und so lange wie möglich
+überleben.
 Seit der Multiplayer-Umstellung spielen alle Spieler **gemeinsam in derselben
 Welt** über das Internet.
 
@@ -20,8 +21,11 @@ Die Welt ist eine große Karte (36000×36000, Kantenlänge 15× die ursprünglic
 **Schnee**, unten links **Wald** (Anfänger-Biom, hier starten die Spieler) und
 unten rechts **Ozean** (nicht begehbar — der Server blockt die Bewegung am
 Ufer). Die Biome sind in `server.js` als `BIOMES`-Rechtecke definiert, die
-Ressourcen-Anzahlen pro Biom stehen in `CONFIG` (`forestTrees`, `snowRocks`
-usw.). Die Biom-Liste geht per `welcome`-Nachricht (`config.biomes`) an den
+Ressourcen-Anzahlen pro Biom stehen in `CONFIG` (`forestTrees`, `snowRocks`,
+`forestGold` usw.). Neben Bäumen, Steinen und Beerensträuchern erzeugt
+`createWorld()` **Goldadern** in Wald (100, `forestGold`) und Schnee (150,
+`snowGold`) sowie **Diamanten** nur im Schnee (70, `snowDiamond`).
+Die Biom-Liste geht per `welcome`-Nachricht (`config.biomes`) an den
 Client, der sie nur als Farb-Rechtecke zeichnet.
 
 In der Welt leben **Tiere**: Hasen (Wald, neutral, fliehen vor Spielern),
@@ -44,9 +48,25 @@ Tag im Wald (`dayWarmRate`) bzw. am Lagerfeuer (`campfireWarmRate`) sinkt; bei
 100 gibt es `freezeDamage` pro Sekunde. Anzeige als dritter Balken (`cold-fill`)
 im HUD. Das **Inventar ist eine Hotbar mit 9 Boxen**: Die Zahlentasten 1–9
 benutzen das Item im Slot (Werkzeug toggeln, Essen essen, Lagerfeuer setzen);
-die Slot-Reihenfolge folgt dem `ITEMS`-Katalog (Client: `hotbarItems()`).
+die Slot-Reihenfolge folgt dem `ITEMS`-Katalog (Client: `hotbarItems()`),
+Werkzeug-Slots zeigen ihren Namen als Tooltip.
 Dafür akzeptiert `eat` optional ein `item` (gezielt essen) und `ITEMS`
 markiert Essbares mit `food: true`.
+
+**Werkzeug-Stufenbaum:** **Axt** und **Spitzhacke** gibt es in vier Stufen
+(**Holz → Stein → Gold → Diamant**); die Map `TOOLS` ordnet jeder
+Werkzeug-ID `kind` (`axe`/`pickaxe`) und `tier` (1–4) zu. Jede Stufe kostet
+Rohstoffe **plus das Werkzeug der Vorstufe**, das `craft()` als Zutat
+verbraucht und dabei aus der Hand legt. Die 8 Werkzeug-Rezepte in `RECIPES`:
+Holzaxt/Holzspitzhacke je 3 Holz; Steinaxt 2 Holz + 3 Stein + Holzaxt,
+Steinspitzhacke 2 Holz + 4 Stein + Holzspitzhacke; Goldaxt 3 Gold + 2 Stein +
+Steinaxt, Goldspitzhacke 4 Gold + 2 Stein + Steinspitzhacke; Diamantaxt
+3 Diamant + 2 Gold + Goldaxt, Diamantspitzhacke 4 Diamant + 2 Gold +
+Goldspitzhacke. Höhere Stufen bringen mehr Ertrag pro Schlag (`tryHit()`):
+Axt +2 Holz je Stufe (`axeWoodBonus`; 3/5/7/9), Spitzhacke +2 Stein je Stufe
+(`pickaxeStoneBonus`; 3/5/7/9) sowie +1 Gold bzw. Diamant je Stufe
+(`pickaxeGoldBonus`/`pickaxeDiamondBonus`; 2/3/4/5); mit bloßer Hand immer 1
+(`woodPerHit`/`stonePerHit`/`goldPerHit`/`diamondPerHit`).
 
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
 
@@ -185,7 +205,7 @@ manuell im Browser:
 1. `npm start`, dann `http://localhost:3000` in **zwei Browserfenstern** öffnen,
    Browser-Konsole auf Fehler prüfen.
 2. Kernabläufe durchspielen: Beitreten mit Namen, Laufen (WASD/Pfeiltasten),
-   Schlagen/Sammeln (Linksklick auf Baum/Stein/Strauch), Beere essen (E),
+   Schlagen/Sammeln (Linksklick auf Baum/Stein/Goldader/Strauch), Beere essen (E),
    Verhungern bis zum Todes-Bildschirm, Neustart über den Button.
 3. Multiplayer prüfen: beide Fenster sehen die Figur des anderen mit Namen,
    Beerenstände der Büsche sind in beiden Fenstern gleich, ein geschlossenes
@@ -212,5 +232,5 @@ CI/CD-Prozess.
   `restart-btn`, `start-screen`, `name-input`, `start-btn`, `start-status`)
   mit den Zugriffen in `js/game.js` übereinstimmen.
 - Geplante Features (siehe README.md): warme Kleidung aus Fellen o. ä.
-  Multiplayer, Biome, Tag/Nacht-Wechsel, Tiere, Crafting, Lagerfeuer und
-  Kälte sind umgesetzt.
+  Multiplayer, Biome, Tag/Nacht-Wechsel, Tiere, Crafting (inkl.
+  Werkzeug-Stufen von Holz bis Diamant), Lagerfeuer und Kälte sind umgesetzt.

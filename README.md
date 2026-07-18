@@ -69,6 +69,13 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 - ❄️ **Kälte** steigt nachts und im Schnee — bei voller Kälteanzeige verlierst
   du Leben! Wärme dich am **Lagerfeuer** (mit **F** oder per Hotbar setzen)
 - 🪨 **Steine** schlagen gibt **Stein**
+- 🪙 **Goldadern** (Wald und Schnee) schlagen gibt **Gold**
+- 💎 **Diamanten** findest du nur im **Schnee** — schlagen gibt **Diamant**
+- 🪓 **Werkzeuge** baust du im Bau-Menü (**C**) in vier Stufen: **Holz →
+  Stein → Gold → Diamant**. Jede Stufe kostet Rohstoffe **plus das Werkzeug
+  der Vorstufe** — dafür sammelt sie mehr pro Schlag: Die Axt bringt +2
+  **Holz** pro Stufe (Holzaxt 3, Diamantaxt 9), die Spitzhacke +2 **Stein**
+  sowie +1 **Gold**/**Diamant** pro Stufe
 - 🍓 **Beerensträucher** schlagen gibt **Beeren** (wachsen nach!)
 - 🍖 Dein **Hunger** sinkt ständig — iss Beeren mit **E**
 - ❤️ Bei Hunger auf 0 verlierst du **Leben**. Bei vollem Bauch heilst du langsam.
@@ -90,8 +97,9 @@ und danach einfach den Server neu starten.
 ## Geplante Features (Ideen)
 
 - [ ] Warme Kleidung aus Fellen (Schutz vor Kälte)
-- [x] Crafting (Werkzeuge aus Holz + Stein bauen)
-- [x] Werkzeuge sammeln schneller
+- [x] Crafting (Werkzeuge in vier Stufen: Holz → Stein → Gold → Diamant)
+- [x] Gold und Diamant als neue Rohstoffe (Diamant nur im Schnee)
+- [x] Werkzeuge sammeln schneller (höhere Stufe = mehr pro Schlag)
 - [x] Kälte nachts und im Schnee (Lagerfeuer wärmt!)
 - [x] Tag/Nacht-Wechsel
 - [x] Tiere (Jagd und Gefahr)
