@@ -1,4 +1,6 @@
 /* Grund-Layout: Das Spiel füllt das ganze Browserfenster */
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&display=swap');
+
 * {
   margin: 0;
   padding: 0;
@@ -7,8 +9,8 @@
 
 body {
   overflow: hidden;
-  font-family: "Segoe UI", Arial, sans-serif;
-  background: #3d8b3d;
+  font-family: "Baloo 2", "Segoe UI", Arial, sans-serif;
+  background: #5fae2d;
   user-select: none;
 }
 
@@ -32,16 +34,17 @@ body {
   position: relative; /* damit das Nummernbadge in der Ecke liegt */
   width: 112px;
   height: 112px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 14px;
+  background: linear-gradient(#8d6b42, #6d4f2c);
+  border: 4px solid #000;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.15), 0 3px 0 rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   color: #fff;
   font-size: 22px;
-  font-weight: bold;
+  font-weight: 800;
 }
 
 .slot .icon {
@@ -72,8 +75,9 @@ body {
 
 /* Leere Boxen: dezent abgedimmt und mit gestricheltem Rand */
 .slot.empty {
-  opacity: 0.4;
+  opacity: 0.5;
   border-style: dashed;
+  background: rgba(0, 0, 0, 0.25);
 }
 
 /* Werkzeug-Slots sind anklickbar (zum Ausrüsten) */
@@ -82,13 +86,15 @@ body {
 }
 
 .slot.tool:hover {
-  border-color: rgba(255, 255, 255, 0.7);
+  border-color: #222;
+  transform: translateY(-2px);
 }
 
 /* Das gerade ausgerüstete Werkzeug wird hervorgehoben */
 .slot.equipped {
-  border-color: #ffd54f;
-  background: rgba(255, 179, 0, 0.35);
+  border-color: #000;
+  background: linear-gradient(#ffd54f, #ffa000);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4), 0 3px 0 rgba(0, 0, 0, 0.4);
 }
 
 /* Lebens-, Hunger- und Kältebalken unten in der Mitte, über der Hotbar */
@@ -105,11 +111,12 @@ body {
 
 .bar {
   position: relative;
-  height: 26px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-radius: 13px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 3px solid #000;
+  border-radius: 14px;
   overflow: hidden;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
 }
 
 .fill {
@@ -119,9 +126,9 @@ body {
   border-radius: 11px;
 }
 
-.fill.health { background: linear-gradient(#ff6b6b, #d32f2f); }
-.fill.hunger { background: linear-gradient(#ffb74d, #ef6c00); }
-.fill.cold { background: linear-gradient(#4fc3f7, #0277bd); }
+.fill.health { background: linear-gradient(#ff5252, #c62828); }
+.fill.hunger { background: linear-gradient(#ffa726, #e65100); }
+.fill.cold { background: linear-gradient(#4fc3f7, #01579b); }
 
 .bar-label {
   position: absolute;
@@ -130,8 +137,8 @@ body {
   transform: translate(-50%, -50%);
   color: #fff;
   font-size: 13px;
-  font-weight: bold;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.9);
 }
 
 /* Hilfe-Text unten (über den Balken und der Hotbar) */
@@ -164,23 +171,31 @@ body {
 }
 
 #death-screen h1 {
-  font-size: 42px;
+  font-size: 46px;
+  font-weight: 800;
   color: #ff5252;
+  text-shadow: 3px 3px 0 #000;
 }
 
 #restart-btn {
-  padding: 12px 32px;
-  font-size: 20px;
-  font-weight: bold;
+  padding: 14px 36px;
+  font-size: 22px;
+  font-weight: 800;
   color: #fff;
-  background: #43a047;
-  border: none;
-  border-radius: 10px;
+  background: #66bb6a;
+  border: 4px solid #000;
+  border-radius: 12px;
+  box-shadow: 0 5px 0 #1b5e20;
   cursor: pointer;
 }
 
 #restart-btn:hover {
-  background: #2e7d32;
+  background: #4caf50;
+}
+
+#restart-btn:active {
+  box-shadow: 0 2px 0 #1b5e20;
+  transform: translateY(3px);
 }
 
 /* Spielerzahl oben rechts */
@@ -188,45 +203,53 @@ body {
   position: fixed;
   top: 12px;
   right: 12px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: #ffca28;
+  border: 3px solid #000;
   border-radius: 10px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
   padding: 8px 12px;
-  color: #fff;
+  color: #2b1a00;
   font-size: 15px;
-  font-weight: bold;
+  font-weight: 800;
 }
 
 /* Crafting-Knopf oben rechts (unter der Spielerzahl) */
 #craft-toggle {
   position: fixed;
-  top: 54px;
+  top: 58px;
   right: 12px;
-  padding: 8px 12px;
+  padding: 9px 14px;
   font-size: 15px;
-  font-weight: bold;
+  font-weight: 800;
   color: #fff;
-  background: rgba(0, 0, 0, 0.45);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: #8d6b42;
+  border: 3px solid #000;
   border-radius: 10px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
   cursor: pointer;
 }
 
 #craft-toggle:hover {
-  border-color: rgba(255, 255, 255, 0.7);
+  background: #a17b4d;
+}
+
+#craft-toggle:active {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  transform: translateY(2px);
 }
 
 /* Crafting-Menü (Liste der Rezepte) */
 #craft-menu {
   position: fixed;
-  top: 96px;
+  top: 100px;
   right: 12px;
   width: 340px;
   max-height: 70vh;
   overflow-y: auto;
-  background: rgba(0, 0, 0, 0.6);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(30, 20, 10, 0.85);
+  border: 4px solid #000;
   border-radius: 12px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
   padding: 12px;
   color: #fff;
 }
@@ -245,7 +268,7 @@ body {
    klickbar und baut das Rezept — kein extra Bauen-Knopf mehr. */
 .recipe {
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 2px solid rgba(0, 0, 0, 0.6);
   border-radius: 8px;
   padding: 8px;
   margin-bottom: 8px;
@@ -323,41 +346,51 @@ body {
 }
 
 #start-screen h1 {
-  font-size: 48px;
+  font-size: 54px;
+  font-weight: 800;
+  text-shadow: 3px 3px 0 #000;
 }
 
 #name-input {
   padding: 12px 16px;
   font-size: 20px;
+  font-weight: 600;
   text-align: center;
-  border: 2px solid rgba(255, 255, 255, 0.4);
+  border: 3px solid #000;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: #fff;
+  color: #333;
   outline: none;
 }
 
 #name-input:focus {
-  border-color: #fff;
+  border-color: #ffca28;
 }
 
 #start-btn {
-  padding: 12px 32px;
-  font-size: 20px;
-  font-weight: bold;
+  padding: 14px 36px;
+  font-size: 22px;
+  font-weight: 800;
   color: #fff;
-  background: #43a047;
-  border: none;
-  border-radius: 10px;
+  background: #66bb6a;
+  border: 4px solid #000;
+  border-radius: 12px;
+  box-shadow: 0 5px 0 #1b5e20;
   cursor: pointer;
 }
 
 #start-btn:hover:not(:disabled) {
-  background: #2e7d32;
+  background: #4caf50;
+}
+
+#start-btn:active:not(:disabled) {
+  box-shadow: 0 2px 0 #1b5e20;
+  transform: translateY(3px);
 }
 
 #start-btn:disabled {
-  background: #777;
+  background: #999;
+  box-shadow: 0 5px 0 #555;
   cursor: wait;
 }
 

@@ -616,33 +616,68 @@ function render() {
   drawMinimap();
 }
 
-// Leichtes Gitter, damit man die Bewegung sieht
+// Einfacher Pseudo-Zufall aus zwei Zahlen (immer dasselbe Ergebnis für
+// dieselbe Zelle -> der Boden "flackert" nicht beim Bewegen)
+function cellRandom(cx, cy) {
+  const s = Math.sin(cx * 127.1 + cy * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+// Boden-Textur im Starve.io-Stil: statt eines schlichten Gitters kleine
+// Gras-Büschel und dunklere Farbtupfer, die zum jeweiligen Biom passen.
 function drawGrid() {
-  const gridSize = 100;
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.06)";
-  ctx.lineWidth = 2;
+  const cellSize = 90;
+  const startX = Math.floor(camera.x / cellSize) * cellSize;
+  const startY = Math.floor(camera.y / cellSize) * cellSize;
 
-  const startX = Math.floor(camera.x / gridSize) * gridSize;
-  const startY = Math.floor(camera.y / gridSize) * gridSize;
+  for (let x = startX; x <= camera.x + canvas.width + cellSize; x += cellSize) {
+    for (let y = startY; y <= camera.y + canvas.height + cellSize; y += cellSize) {
+      const cx = Math.floor(x / cellSize);
+      const cy = Math.floor(y / cellSize);
+      const r1 = cellRandom(cx, cy);
+      const r2 = cellRandom(cx + 91, cy + 17);
+      const r3 = cellRandom(cx - 53, cy + 29);
 
-  for (let x = startX; x <= camera.x + canvas.width; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, camera.y);
-    ctx.lineTo(x, camera.y + canvas.height);
-    ctx.stroke();
-  }
-  for (let y = startY; y <= camera.y + canvas.height; y += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(camera.x, y);
-    ctx.lineTo(camera.x + canvas.width, y);
-    ctx.stroke();
+      // Welches Biom ist an dieser Stelle? (bestimmt Farbe der Tupfer)
+      let dark = "rgba(0, 0, 0, 0.08)";
+      for (const b of CONFIG.biomes) {
+        if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) {
+          dark = b.color;
+          break;
+        }
+      }
+
+      const px = x + r1 * cellSize;
+      const py = y + r2 * cellSize;
+
+      // Kleiner dunklerer Fleck als Bodenschattierung
+      ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+      ctx.beginPath();
+      ctx.ellipse(px, py, 14, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Gras-Büschel: drei kleine dunkelgrüne Striche, wie bei Starve.io
+      if (r3 > 0.35) {
+        const gx = x + r3 * cellSize;
+        const gy = y + cellRandom(cx + 5, cy - 5) * cellSize;
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.22)";
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(gx + i * 5, gy + 6);
+          ctx.lineTo(gx + i * 5 + i * 2, gy - 6);
+          ctx.stroke();
+        }
+      }
+    }
   }
 }
 
 // Dunkler Rand am Ende der Welt
 function drawWorldBorder() {
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
-  ctx.lineWidth = 10;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
+  ctx.lineWidth = 14;
   ctx.strokeRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
 }
 
@@ -654,49 +689,65 @@ function drawResource(res) {
 
   if (res.type === "tree") {
     // Stamm
-    ctx.fillStyle = "#6d4c2f";
+    ctx.fillStyle = "#7a5230";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(x, y, res.radius * 0.35, 0, Math.PI * 2);
     ctx.fill();
-    // Baumkrone
-    ctx.fillStyle = "#2e7d32";
-    ctx.strokeStyle = "#1b5e20";
-    ctx.lineWidth = 4;
+    ctx.stroke();
+    // Baumkrone: kräftiges Grün mit dicker schwarzer Kontur (Starve.io-Look)
+    ctx.fillStyle = "#43a047";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    // Glanzlicht oben links, macht die Krone plastischer
+    ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.32, y - res.radius * 0.35, res.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
   } else if (res.type === "rock") {
-    ctx.fillStyle = "#9e9e9e";
-    ctx.strokeStyle = "#616161";
-    ctx.lineWidth = 4;
+    ctx.fillStyle = "#bdbdbd";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     // Kleine Details auf dem Stein
-    ctx.fillStyle = "#757575";
+    ctx.fillStyle = "#8d8d8d";
     ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
+    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    // Glanzlicht
+    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.28, 0, Math.PI * 2);
     ctx.fill();
   } else if (res.type === "bush") {
     // Strauch
-    ctx.fillStyle = "#388e3c";
-    ctx.strokeStyle = "#1b5e20";
-    ctx.lineWidth = 3;
+    ctx.fillStyle = "#4caf50";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // Beeren als kleine rote Punkte
+    // Beeren: kräftiges Rot mit schwarzer Kontur
     for (let i = 0; i < res.berries; i++) {
       const angle = (i / 4) * Math.PI * 2 + 0.5;
       const bx = x + Math.cos(angle) * res.radius * 0.5;
       const by = y + Math.sin(angle) * res.radius * 0.5;
       ctx.fillStyle = "#e53935";
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(bx, by, 5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
     }
   }
 }
@@ -707,10 +758,13 @@ function drawStructure(s) {
   const x = s.x, y = s.y;
 
   // Steinring
-  ctx.fillStyle = "#6d6d6d";
+  ctx.fillStyle = "#8d8d8d";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(x, y, 20, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
 
   // Holzscheite (zwei gekreuzte Balken)
   ctx.strokeStyle = "#5d4037";
@@ -816,9 +870,9 @@ function drawPlayer(p) {
   ctx.translate(p.x, p.y);
   ctx.rotate(p.angle || 0);
 
-  // Hände (zwei kleine Kreise vorne)
+  // Hände (zwei kleine Kreise vorne) — dicke schwarze Kontur wie bei Starve.io
   ctx.fillStyle = "#e0ac69";
-  ctx.strokeStyle = "#8d6e42";
+  ctx.strokeStyle = "#000";
   ctx.lineWidth = 3;
 
   // Rechte Hand (schlägt)
@@ -834,12 +888,25 @@ function drawPlayer(p) {
 
   // Körper
   ctx.fillStyle = "#e0ac69";
-  ctx.strokeStyle = "#8d6e42";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+
+  // Glanzlicht oben links, macht die Figur "plastischer"
+  ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+  ctx.beginPath();
+  ctx.arc(-r * 0.3, -r * 0.35, r * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Einfaches Gesicht: zwei schwarze Punktaugen, die immer nach vorne schauen
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(r * 0.35, -r * 0.32, r * 0.11, 0, Math.PI * 2);
+  ctx.arc(r * 0.35, r * 0.32, r * 0.11, 0, Math.PI * 2);
+  ctx.fill();
 
   // Ausgerüstetes Werkzeug in der rechten Hand zeigen
   if (p.equipped && ITEMS[p.equipped]) {

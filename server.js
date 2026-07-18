@@ -223,9 +223,9 @@ const server = http.createServer((req, res) => {
 // Die Farbe schickt der Server beim Beitritt an die Browser zum Zeichnen.
 const half = CONFIG.worldSize / 2;
 const BIOMES = [
-  { name: "snow",   color: "#dfe9f2", x: 0,    y: 0,    w: CONFIG.worldSize, h: half },
-  { name: "forest", color: "#4caf50", x: 0,    y: half, w: half, h: half },
-  { name: "ocean",  color: "#1b6ca8", x: half, y: half, w: half, h: half },
+  { name: "snow",   color: "#eef4fa", x: 0,    y: 0,    w: CONFIG.worldSize, h: half },
+  { name: "forest", color: "#5fae2d", x: 0,    y: half, w: half, h: half },
+  { name: "ocean",  color: "#2196d8", x: half, y: half, w: half, h: half },
 ];
 
 // In welchem Biom liegt der Punkt (x, y)?
