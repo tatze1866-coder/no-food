@@ -43,6 +43,21 @@ body {
   font-size: 22px;
 }
 
+/* Werkzeug-Slots sind anklickbar (zum Ausrüsten) */
+.slot.tool {
+  cursor: pointer;
+}
+
+.slot.tool:hover {
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* Das gerade ausgerüstete Werkzeug wird hervorgehoben */
+.slot.equipped {
+  border-color: #ffd54f;
+  background: rgba(255, 179, 0, 0.35);
+}
+
 /* Lebens- und Hungerbalken unten in der Mitte */
 #bars {
   position: fixed;
@@ -146,6 +161,100 @@ body {
   color: #fff;
   font-size: 15px;
   font-weight: bold;
+}
+
+/* Crafting-Knopf oben rechts (unter der Spielerzahl) */
+#craft-toggle {
+  position: fixed;
+  top: 54px;
+  right: 12px;
+  padding: 8px 12px;
+  font-size: 15px;
+  font-weight: bold;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+#craft-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* Crafting-Menü (Liste der Rezepte) */
+#craft-menu {
+  position: fixed;
+  top: 96px;
+  right: 12px;
+  width: 260px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  color: #fff;
+}
+
+#craft-menu.hidden {
+  display: none;
+}
+
+#craft-menu h2 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+/* Eine Zeile im Bau-Menü: Icon + Name + Kosten + Knopf */
+.recipe {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.recipe-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.recipe-cost {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 6px;
+}
+
+/* Eine Zutat, die man nicht genug hat, wird rot markiert */
+.cost-missing {
+  color: #ff8a80;
+}
+
+.recipe button {
+  width: 100%;
+  padding: 6px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #fff;
+  background: #43a047;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.recipe button:hover:not(:disabled) {
+  background: #2e7d32;
+}
+
+.recipe button:disabled {
+  background: #555;
+  cursor: not-allowed;
 }
 
 /* Start-Bildschirm (Name eingeben und beitreten) */

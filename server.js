@@ -42,6 +42,56 @@ const CONFIG = {
   bushCount: 55,          // Anzahl Beerensträucher
   bushBerries: 4,         // Beeren pro Strauch
   berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
+
+  // --- Item-/Crafting-System (Claude) -------------------------------
+  // Eigener Block, damit er sich nicht mit anderen Änderungen überschneidet.
+  capacity: 20,           // Obergrenze pro Item-Sorte im Inventar
+  woodPerHit: 1,          // Holz pro Baum-Schlag mit bloßer Hand
+  stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
+  axeWoodBonus: 2,        // Extra-Holz, wenn eine Axt ausgerüstet ist
+  pickaxeStoneBonus: 2,   // Extra-Stein, wenn eine Spitzhacke ausgerüstet ist
+  // ------------------------------------------------------------------
+};
+
+// ---------- ITEMS: Katalog aller Gegenstände ----------
+// Die einzige Wahrheit über alle Items. Jedes Item hat einen Namen und ein
+// Emoji-Icon. Der Client bekommt diesen Katalog beim Beitritt ("welcome"),
+// damit Server und Browser immer dieselben Namen/Icons benutzen.
+// "tool: true" markiert Werkzeuge (die man ausrüsten kann).
+const ITEMS = {
+  // Rohstoffe
+  wood:        { name: "Holz",            icon: "🪵" },
+  stone:       { name: "Stein",           icon: "🪨" },
+  berry:       { name: "Beere",           icon: "🍓" },
+
+  // Werkzeuge (ausrüstbar)
+  axe:         { name: "Axt",             icon: "🪓", tool: true },
+  pickaxe:     { name: "Spitzhacke",      icon: "⛏️", tool: true },
+  spear:       { name: "Speer",           icon: "🔱", tool: true },
+
+  // Für Schritt 2 reserviert (Lagerfeuer & Rucksack)
+  campfire:    { name: "Lagerfeuer",      icon: "🔥" },
+  backpack:    { name: "Rucksack",        icon: "🎒" },
+
+  // Platzhalter für spätere Tier-Drops (Spinne, Wolf, Hase, Bär).
+  // Noch nicht erhältlich, aber schon definiert, damit Rezepte und Anzeige
+  // später sofort funktionieren.
+  raw_meat:    { name: "Rohes Fleisch",   icon: "🥩" },
+  cooked_meat: { name: "Gebratenes Fleisch", icon: "🍖" },
+  rabbit_hide: { name: "Hasenfell",       icon: "🐇" },
+  wolf_fur:    { name: "Wolfsfell",       icon: "🐺" },
+  bear_fur:    { name: "Bärenfell",       icon: "🐻" },
+  spider_silk: { name: "Spinnenseide",    icon: "🕸️" },
+};
+
+// ---------- RECIPES: Crafting-Rezepte ----------
+// Jedes Rezept: was es kostet (cost) und was dabei herauskommt (result).
+// Schritt 1 enthält die drei Werkzeuge. Lagerfeuer, Rucksack und das
+// Koch-Rezept (cooked_meat) kommen in Schritt 2 dazu.
+const RECIPES = {
+  axe:     { name: "Axt",        cost: { wood: 3, stone: 3 }, result: { axe: 1 } },
+  pickaxe: { name: "Spitzhacke", cost: { wood: 3, stone: 5 }, result: { pickaxe: 1 } },
+  spear:   { name: "Speer",      cost: { wood: 5, stone: 5 }, result: { spear: 1 } },
 };
 
 const TICKS_PER_SECOND = 20;   // Wie oft pro Sekunde der Server rechnet
@@ -163,9 +213,8 @@ function addPlayer(id, name) {
     angle: 0,           // Blickrichtung (zur Maus)
     health: CONFIG.maxHealth,
     hunger: CONFIG.maxHunger,
-    wood: 0,
-    stone: 0,
-    berries: 0,
+    inventory: {},      // Item-Sorte (id) -> Anzahl, z.B. { wood: 3, axe: 1 }
+    equipped: null,     // Welches Werkzeug gerade in der Hand ist (id oder null)
     hitTimer: 0,        // Zeit bis zum nächsten möglichen Schlag
     dead: false,
     survivalTime: 0,    // Wie lange der Spieler schon lebt (Sekunden)
@@ -179,20 +228,82 @@ function resetPlayer(player) {
   player.y = CONFIG.worldSize / 2;
   player.health = CONFIG.maxHealth;
   player.hunger = CONFIG.maxHunger;
-  player.wood = 0;
-  player.stone = 0;
-  player.berries = 0;
+  player.inventory = {};
+  player.equipped = null;
   player.hitTimer = 0;
   player.dead = false;
   player.survivalTime = 0;
 }
 
+// --- Inventar-Hilfsfunktionen ---
+// Wie oft der Spieler ein Item besitzt
+function countItem(player, id) {
+  return player.inventory[id] || 0;
+}
+
+// Die aktuelle Obergrenze pro Item-Sorte (mit Rucksack höher — Schritt 2)
+function capacityFor(player) {
+  return CONFIG.capacity;
+}
+
+// Ein Item hinzufügen, aber nie über die Obergrenze hinaus.
+// Gibt zurück, wie viel wirklich Platz gefunden hat.
+function giveItem(player, id, n) {
+  const max = capacityFor(player);
+  const have = countItem(player, id);
+  const room = Math.max(0, max - have);
+  const added = Math.min(n, room);
+  if (added > 0) player.inventory[id] = have + added;
+  return added;
+}
+
+// Prüfen, ob der Spieler alle Zutaten eines Rezepts hat
+function canAfford(player, cost) {
+  for (const id in cost) {
+    if (countItem(player, id) < cost[id]) return false;
+  }
+  return true;
+}
+
+// Die Zutaten eines Rezepts abziehen (vorher mit canAfford prüfen!)
+function takeItems(player, cost) {
+  for (const id in cost) {
+    player.inventory[id] -= cost[id];
+    if (player.inventory[id] <= 0) delete player.inventory[id];
+  }
+}
+
 // Eine Beere aus dem Inventar essen
 function eatBerry(player) {
   if (player.dead) return;
-  if (player.berries > 0 && player.hunger < CONFIG.maxHunger) {
-    player.berries--;
+  if (countItem(player, "berry") > 0 && player.hunger < CONFIG.maxHunger) {
+    takeItems(player, { berry: 1 });
     player.hunger = clamp(player.hunger + CONFIG.berryFood, 0, CONFIG.maxHunger);
+  }
+}
+
+// Ein Rezept bauen: prüfen, abziehen, Ergebnis gutschreiben
+function craft(player, recipeId) {
+  if (player.dead) return;
+  const recipe = RECIPES[recipeId];
+  if (!recipe) return;
+  if (!canAfford(player, recipe.cost)) return;
+
+  takeItems(player, recipe.cost);
+  for (const id in recipe.result) {
+    giveItem(player, id, recipe.result[id]);
+  }
+}
+
+// Ein Werkzeug in die Hand nehmen (oder mit null weglegen)
+function equip(player, toolId) {
+  if (toolId === null) {
+    player.equipped = null;
+    return;
+  }
+  // Nur ausrüsten, was ein Werkzeug ist UND im Inventar liegt
+  if (ITEMS[toolId] && ITEMS[toolId].tool && countItem(player, toolId) > 0) {
+    player.equipped = toolId;
   }
 }
 
@@ -284,13 +395,21 @@ function tryHit(player) {
   if (!closest) return;
 
   if (closest.type === "tree") {
-    player.wood++;
+    // Mit ausgerüsteter Axt gibt es mehr Holz
+    let amount = CONFIG.woodPerHit;
+    if (player.equipped === "axe") amount += CONFIG.axeWoodBonus;
+    giveItem(player, "wood", amount);
   } else if (closest.type === "rock") {
-    player.stone++;
+    // Mit ausgerüsteter Spitzhacke gibt es mehr Stein
+    let amount = CONFIG.stonePerHit;
+    if (player.equipped === "pickaxe") amount += CONFIG.pickaxeStoneBonus;
+    giveItem(player, "stone", amount);
   } else if (closest.type === "bush" && closest.berries > 0) {
-    closest.berries--;
-    player.berries++;
-    changedBushes.add(closestIndex);
+    const added = giveItem(player, "berry", 1);
+    if (added > 0) {
+      closest.berries--;
+      changedBushes.add(closestIndex);
+    }
   }
 }
 
@@ -302,11 +421,14 @@ function tryHit(player) {
 //   { t: "input", up, down, left, right, angle }   Tasten + Blickrichtung
 //   { t: "hit" }                            Schlagen
 //   { t: "eat" }                            Beere essen
+//   { t: "craft", recipe: "axe" }           Ein Rezept bauen
+//   { t: "equip", tool: "axe"|null }         Werkzeug ausrüsten / weglegen
 //   { t: "respawn" }                        Nach dem Tod neu starten
 //
 // Server -> Browser:
-//   { t: "welcome", id, config, world }     Begrüßung: eigene Nummer + Welt
+//   { t: "welcome", id, config, items, recipes, world }   Begrüßung + Kataloge
 //   { t: "state", players, bushes }         Spielstand (TICKS_PER_SECOND-mal/s)
+//                 (jeder Spieler: inventory {id->Anzahl} + equipped)
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
 
 const wss = new WebSocketServer({ server: server, maxPayload: 16 * 1024 });
@@ -341,9 +463,8 @@ function stateMessage() {
       angle: Math.round(p.angle * 100) / 100,
       health: Math.round(p.health),
       hunger: Math.round(p.hunger),
-      wood: p.wood,
-      stone: p.stone,
-      berries: p.berries,
+      inventory: p.inventory,
+      equipped: p.equipped,
       dead: p.dead,
       survivalTime: Math.floor(p.survivalTime),
     });
@@ -392,7 +513,10 @@ wss.on("connection", (ws) => {
           hitCooldown: CONFIG.hitCooldown,
           maxHealth: CONFIG.maxHealth,
           maxHunger: CONFIG.maxHunger,
+          capacity: CONFIG.capacity,
         },
+        items: ITEMS,        // Katalog: Namen + Icons aller Items
+        recipes: RECIPES,    // Alle Crafting-Rezepte für das Menü
         world: worldForClient(),
       });
       return;
@@ -415,6 +539,11 @@ wss.on("connection", (ws) => {
       tryHit(player);
     } else if (msg.t === "eat") {
       eatBerry(player);
+    } else if (msg.t === "craft") {
+      if (typeof msg.recipe === "string") craft(player, msg.recipe);
+    } else if (msg.t === "equip") {
+      // tool ist entweder ein Item-Name (String) oder null (weglegen)
+      if (msg.tool === null || typeof msg.tool === "string") equip(player, msg.tool);
     } else if (msg.t === "respawn") {
       if (player.dead) resetPlayer(player);
     }

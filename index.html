@@ -9,12 +9,8 @@
 <body>
   <canvas id="game"></canvas>
 
-  <!-- Anzeige oben links: Inventar -->
-  <div id="inventory">
-    <div class="slot"><span class="icon">🪵</span><span id="inv-wood">0</span></div>
-    <div class="slot"><span class="icon">🪨</span><span id="inv-stone">0</span></div>
-    <div class="slot"><span class="icon">🍓</span><span id="inv-berry">0</span></div>
-  </div>
+  <!-- Anzeige oben links: Inventar (wird vom Spiel dynamisch gefüllt) -->
+  <div id="inventory"></div>
 
   <!-- Anzeige unten: Lebens- und Hungerbalken -->
   <div id="bars">
@@ -25,9 +21,18 @@
   <!-- Anzeige oben rechts: Mitspieler -->
   <div id="player-count">0 Spieler online</div>
 
+  <!-- Crafting-Knopf oben rechts (öffnet/schließt das Bau-Menü) -->
+  <button id="craft-toggle">🔨 Bauen (C)</button>
+
+  <!-- Crafting-Menü: Liste der Rezepte (wird dynamisch gefüllt) -->
+  <div id="craft-menu" class="hidden">
+    <h2>🔨 Bauen</h2>
+    <div id="recipe-list"></div>
+  </div>
+
   <!-- Kurze Steuerungs-Hilfe -->
   <div id="help">
-    WASD = Laufen &nbsp;|&nbsp; Maus = Schauen &nbsp;|&nbsp; Klick = Schlagen &nbsp;|&nbsp; E = Beere essen
+    WASD = Laufen &nbsp;|&nbsp; Maus = Schauen &nbsp;|&nbsp; Klick = Schlagen &nbsp;|&nbsp; E = Essen &nbsp;|&nbsp; C = Bauen &nbsp;|&nbsp; Werkzeug anklicken = ausrüsten
   </div>
 
   <!-- Start-Bildschirm: Name eingeben und beitreten -->

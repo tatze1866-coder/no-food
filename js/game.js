@@ -27,7 +27,13 @@ const CONFIG = {
   hitCooldown: 0.4,
   maxHealth: 100,
   maxHunger: 100,
+  capacity: 20,
 };
+
+// Kataloge vom Server (kommen beim Beitritt in der "welcome"-Nachricht):
+// ITEMS = alle Items (Name + Icon), RECIPES = alle Bau-Rezepte.
+let ITEMS = {};
+let RECIPES = {};
 
 // ---------- 2. HILFSFUNKTIONEN ----------
 const canvas = document.getElementById("game");
@@ -52,6 +58,7 @@ const mouse = { x: 0, y: 0, down: false };
 window.addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
   if (e.key.toLowerCase() === "e") sendMessage({ t: "eat" });
+  if (e.key.toLowerCase() === "c") toggleCraftMenu();
 });
 window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
@@ -77,7 +84,7 @@ function currentInput() {
 // Nachrichten sind kleine JSON-Objekte. Das Feld "t" sagt, was gemeint ist
 // (die gleiche Liste steht oben in server.js — beide müssen zusammenpassen!).
 //
-// Browser -> Server:  join, input, hit, eat, respawn
+// Browser -> Server:  join, input, hit, eat, craft, equip, respawn
 // Server -> Browser:  welcome, state, playerLeft
 
 let ws = null;
@@ -112,10 +119,13 @@ ws.addEventListener("message", (event) => {
     // Beitritt bestätigt: eigene Nummer, echte Einstellungen und die Welt
     myId = msg.id;
     Object.assign(CONFIG, msg.config);
+    ITEMS = msg.items || {};
+    RECIPES = msg.recipes || {};
     resources = msg.world;
     for (const res of resources) res.shake = 0; // Wackel-Animation
     joined = true;
     document.getElementById("start-screen").classList.add("hidden");
+    buildRecipeMenu(); // Bau-Menü einmalig aus den Rezepten aufbauen
   } else if (msg.t === "state") {
     applyState(msg);
   } else if (msg.t === "playerLeft") {
@@ -141,6 +151,9 @@ document.getElementById("start-btn").addEventListener("click", () => {
 document.getElementById("restart-btn").addEventListener("click", () => {
   sendMessage({ t: "respawn" });
 });
+
+// Der Bauen-Knopf oben rechts öffnet/schließt das Crafting-Menü
+document.getElementById("craft-toggle").addEventListener("click", toggleCraftMenu);
 
 // 15-mal pro Sekunde die aktuellen Tasten + Blickrichtung zum Server schicken
 setInterval(() => {
@@ -196,9 +209,8 @@ function applyState(msg) {
     entry.angle = p.angle;
     entry.health = p.health;
     entry.hunger = p.hunger;
-    entry.wood = p.wood;
-    entry.stone = p.stone;
-    entry.berries = p.berries;
+    entry.inventory = p.inventory || {};
+    entry.equipped = p.equipped || null;
     entry.dead = p.dead;
     entry.survivalTime = p.survivalTime;
   }
@@ -274,16 +286,124 @@ function predictShake(me) {
 // Anzeige (Inventar + Balken + Spielerzahl) aktualisieren
 function updateHUD(me) {
   if (me) {
-    document.getElementById("inv-wood").textContent = me.wood;
-    document.getElementById("inv-stone").textContent = me.stone;
-    document.getElementById("inv-berry").textContent = me.berries;
-
     const healthPct = (me.health / CONFIG.maxHealth) * 100;
     const hungerPct = (me.hunger / CONFIG.maxHunger) * 100;
     document.getElementById("health-fill").style.width = healthPct + "%";
     document.getElementById("hunger-fill").style.width = hungerPct + "%";
+    updateInventory(me);
   }
   document.getElementById("player-count").textContent = players.size + " Spieler online";
+}
+
+// Das Inventar wird nur neu gezeichnet, wenn sich wirklich etwas geändert hat
+// (sonst würde jeder Klick auf ein Werkzeug 60-mal pro Sekunde „weggewischt").
+let invSignature = "";
+
+function updateInventory(me) {
+  const inv = me.inventory || {};
+  const signature = JSON.stringify(inv) + "|" + me.equipped;
+  if (signature === invSignature) return;
+  invSignature = signature;
+
+  const container = document.getElementById("inventory");
+  container.innerHTML = "";
+
+  // In der Reihenfolge des Katalogs durchgehen (stabile Anordnung)
+  for (const id in ITEMS) {
+    const count = inv[id] || 0;
+    if (count <= 0) continue;
+
+    const item = ITEMS[id];
+    const slot = document.createElement("div");
+    slot.className = "slot";
+    slot.innerHTML =
+      '<span class="icon">' + item.icon + '</span><span>' + count + "</span>";
+
+    // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
+    if (item.tool) {
+      slot.classList.add("tool");
+      if (me.equipped === id) slot.classList.add("equipped");
+      slot.title = "Klicken zum Ausrüsten";
+      slot.addEventListener("click", () => {
+        sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
+      });
+    }
+
+    container.appendChild(slot);
+  }
+
+  // Machbarkeit der Rezepte hängt am Inventar — also mit aktualisieren
+  refreshRecipeMenu(me);
+}
+
+// ---------- CRAFTING-MENÜ ----------
+// Das Menü wird einmal aus den Rezepten aufgebaut (buildRecipeMenu) und danach
+// nur noch aktualisiert (refreshRecipeMenu: Kosten einfärben, Knopf sperren).
+
+function toggleCraftMenu() {
+  if (!joined) return;
+  document.getElementById("craft-menu").classList.toggle("hidden");
+  const me = players.get(myId);
+  if (me) refreshRecipeMenu(me);
+}
+
+function buildRecipeMenu() {
+  const list = document.getElementById("recipe-list");
+  list.innerHTML = "";
+
+  for (const id in RECIPES) {
+    const recipe = RECIPES[id];
+    const row = document.createElement("div");
+    row.className = "recipe";
+
+    // Kopf: Icon + Name des Ergebnisses
+    const resultId = Object.keys(recipe.result)[0];
+    const icon = ITEMS[resultId] ? ITEMS[resultId].icon : "";
+    const head = document.createElement("div");
+    head.className = "recipe-head";
+    head.innerHTML = "<span>" + icon + "</span><span>" + recipe.name + "</span>";
+    row.appendChild(head);
+
+    // Kosten-Zeile (wird von refreshRecipeMenu gefüllt)
+    const cost = document.createElement("div");
+    cost.className = "recipe-cost";
+    cost.dataset.recipe = id;
+    row.appendChild(cost);
+
+    // Bauen-Knopf
+    const btn = document.createElement("button");
+    btn.textContent = "Bauen";
+    btn.dataset.recipe = id;
+    btn.addEventListener("click", () => sendMessage({ t: "craft", recipe: id }));
+    row.appendChild(btn);
+
+    list.appendChild(row);
+  }
+}
+
+function refreshRecipeMenu(me) {
+  if (!me) return;
+  const inv = me.inventory || {};
+
+  for (const id in RECIPES) {
+    const recipe = RECIPES[id];
+    const costEl = document.querySelector('.recipe-cost[data-recipe="' + id + '"]');
+    const btn = document.querySelector('.recipe button[data-recipe="' + id + '"]');
+    if (!costEl || !btn) continue;
+
+    let affordable = true;
+    const parts = [];
+    for (const need in recipe.cost) {
+      const have = inv[need] || 0;
+      const enough = have >= recipe.cost[need];
+      if (!enough) affordable = false;
+      const itemIcon = ITEMS[need] ? ITEMS[need].icon : need;
+      const cls = enough ? "" : ' class="cost-missing"';
+      parts.push("<span" + cls + ">" + itemIcon + " " + have + "/" + recipe.cost[need] + "</span>");
+    }
+    costEl.innerHTML = parts.join(" &nbsp; ");
+    btn.disabled = !affordable;
+  }
 }
 
 // Todes-Bildschirm ein-/ausblenden (der Server entscheidet über dead)
@@ -450,6 +570,14 @@ function drawPlayer(p) {
   ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+
+  // Ausgerüstetes Werkzeug in der rechten Hand zeigen
+  if (p.equipped && ITEMS[p.equipped]) {
+    ctx.font = "20px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(ITEMS[p.equipped].icon, r * 0.95 + punch, r * 0.6);
+  }
 
   ctx.restore();
 
