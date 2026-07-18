@@ -6,8 +6,8 @@ Dieser Leitfaden richtet sich an KI-Coding-Agenten, die im Projekt **no-food** a
 
 **no-food** ist ein kleines 2D-Überlebensspiel im Browser, inspiriert von
 [Starve.io](https://starve.io). Der Spieler sammelt Ressourcen (Holz, Stein,
-Gold, Diamant, Beeren), muss seinen Hunger stillen und so lange wie möglich
-überleben.
+Eisenerz, Golderz, Diamant, Beeren), muss seinen Hunger stillen und so lange
+wie möglich überleben.
 Seit der Multiplayer-Umstellung spielen alle Spieler **gemeinsam in derselben
 Welt** über das Internet.
 
@@ -22,11 +22,15 @@ Die Welt ist eine große Karte (36000×36000, Kantenlänge 15× die ursprünglic
 unten rechts **Ozean** (nicht begehbar — der Server blockt die Bewegung am
 Ufer). Die Biome sind in `server.js` als `BIOMES`-Rechtecke definiert, die
 Ressourcen-Anzahlen pro Biom stehen in `CONFIG` (`forestTrees`, `snowRocks`,
-`forestGold` usw.). Neben Bäumen, Steinen und Beerensträuchern erzeugt
-`createWorld()` **Goldadern** in Wald (100, `forestGold`) und Schnee (150,
-`snowGold`) sowie **Diamanten** nur im Schnee (70, `snowDiamond`).
-Die Biom-Liste geht per `welcome`-Nachricht (`config.biomes`) an den
-Client, der sie nur als Farb-Rechtecke zeichnet.
+`forestIronOre` usw.). Neben Bäumen, Steinen und Beerensträuchern erzeugt
+`createWorld()` **Eisenerz** (viel im Wald: 130 `forestIronOre`, wenig im
+Schnee: 35 `snowIronOre`), **Golderz** (umgekehrt: 35 `forestGoldOre` im
+Wald, 130 `snowGoldOre` im Schnee) sowie **Diamanten** nur im Schnee (70,
+`snowDiamond`). Durch den Wald fließt ein gewundener **Fluss** (`RIVERS`):
+begehbar, aber man läuft darin langsamer (`riverWidth` 170,
+`riverSpeedMultiplier` 0.55; geprüft in `inRiver()`).
+Biome und Flüsse gehen per `welcome`-Nachricht (`config.biomes`,
+`config.rivers`) an den Client, der sie nur zeichnet.
 
 In der Welt leben **Tiere**: Hasen (Wald, neutral, fliehen vor Spielern),
 Spinnen (Wald, nur **nachts** feindlich), Wölfe (Wald, immer feindlich) und
@@ -41,6 +45,9 @@ als der Spieler und bewegen sich **ruckweise** (Ruck–Stopp, siehe
 `moveAnimal()` und gilt für Jagen, Fliehen und Wandern — so kann man Tieren
 ausweichen (und Hasen einholen). Die Tier-Werte stehen in
 `ANIMAL_TYPES` (Abschnitt 1), die KI in `updateAnimal()` (Abschnitt 6).
+Hasen, Spinnen und Wölfe zeichnet der Client als **Sprite-Bilder** aus
+`assets/` (`ANIMAL_SPRITES` in `js/game.js`), den Eisbär weiterhin als
+Vektor-Figur.
 
 **Kälte:** Spieler haben einen Kälte-Wert (`cold`, 0 = warm, 100 = erfriert),
 der nachts (`nightColdRate`) und im Schnee-Biom (`snowColdRate`) steigt und am
@@ -53,20 +60,33 @@ Werkzeug-Slots zeigen ihren Namen als Tooltip.
 Dafür akzeptiert `eat` optional ein `item` (gezielt essen) und `ITEMS`
 markiert Essbares mit `food: true`.
 
-**Werkzeug-Stufenbaum:** **Axt** und **Spitzhacke** gibt es in vier Stufen
-(**Holz → Stein → Gold → Diamant**); die Map `TOOLS` ordnet jeder
-Werkzeug-ID `kind` (`axe`/`pickaxe`) und `tier` (1–4) zu. Jede Stufe kostet
-Rohstoffe **plus das Werkzeug der Vorstufe**, das `craft()` als Zutat
-verbraucht und dabei aus der Hand legt. Die 8 Werkzeug-Rezepte in `RECIPES`:
-Holzaxt/Holzspitzhacke je 3 Holz; Steinaxt 2 Holz + 3 Stein + Holzaxt,
-Steinspitzhacke 2 Holz + 4 Stein + Holzspitzhacke; Goldaxt 3 Gold + 2 Stein +
-Steinaxt, Goldspitzhacke 4 Gold + 2 Stein + Steinspitzhacke; Diamantaxt
-3 Diamant + 2 Gold + Goldaxt, Diamantspitzhacke 4 Diamant + 2 Gold +
-Goldspitzhacke. Höhere Stufen bringen mehr Ertrag pro Schlag (`tryHit()`):
-Axt +2 Holz je Stufe (`axeWoodBonus`; 3/5/7/9), Spitzhacke +2 Stein je Stufe
-(`pickaxeStoneBonus`; 3/5/7/9) sowie +1 Gold bzw. Diamant je Stufe
-(`pickaxeGoldBonus`/`pickaxeDiamondBonus`; 2/3/4/5); mit bloßer Hand immer 1
-(`woodPerHit`/`stonePerHit`/`goldPerHit`/`diamondPerHit`).
+**Werkzeug-System:** Vier Werkzeugarten — **Axt**, **Spitzhacke**,
+**Schwert**, **Speer** — in je fünf Stufen (**Holz → Stein → Eisen → Gold →
+Diamant**, also 20 Werkzeuge); die Map `TOOLS` ordnet jeder Werkzeug-ID
+`kind` (`axe`/`pickaxe`/`sword`/`spear`) und `tier` (1–5) zu. Jede höhere
+Stufe kostet Rohstoffe **plus das Werkzeug der Vorstufe**, das `craft()` als
+Zutat verbraucht und dabei aus der Hand legt — die 20 Rezepte stehen in
+`RECIPES` (Beispiel Äxte: Holzaxt 3 Holz; Steinaxt 2 Holz + 3 Stein +
+Holzaxt; Eisenaxt 3 Eisenerz + 2 Stein + Steinaxt; Goldaxt 3 Golderz +
+2 Eisenerz + Eisenaxt; Diamantaxt 3 Diamant + 2 Golderz + Goldaxt — die
+anderen Arten analog). Ertrag und Schaden folgen der Formel Grundwert +
+Stufe × Bonus (`tryHit()`): Axt +2 Holz je Stufe (`axeWoodBonus`;
+3/5/7/9/11), Spitzhacke +2 Stein je Stufe (`pickaxeStoneBonus`; 3/5/7/9/11)
+sowie +1 beim Abbau von Eisenerz, Golderz und Diamant (`pickaxeOreBonus`;
+2/3/4/5/6), Schwert +8 Schaden je Stufe (`swordDamageBonus`), Speer +12
+(`spearDamageBonus` — stärker als das Schwert); mit bloßer Hand immer 1
+(`woodPerHit`/`stonePerHit`/`orePerHit`). Die vier Holz-Werkzeuge haben
+eigene Sprite-Bilder in `assets/` (`image` im `ITEMS`-Katalog), die höheren
+Stufen nutzen Emoji-Icons.
+
+**Kollision (Hitboxen):** Ressourcen (Bäume, Steine, Erze, Diamanten,
+Sträucher) und Spieler haben Hitboxen — man kann nicht mehr hindurchlaufen.
+Der Server löst Überlappungen im Tick auf (`update()`, Abschnitt 6): gegen
+Ressourcen wird der Spieler auf deren Rand zurückgeschoben (so rutscht man
+an ihnen entlang), zwei Spieler werden weich je zur Hälfte
+auseinandergeschoben. Landet dabei jemand im Ozean, wird die Position
+zurückgesetzt — niemand wird ins Wasser geschubst. Tote Spieler blockieren
+nicht. Der Client brauchte dafür keine Änderung: der Server ist autoritativ.
 
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
 
@@ -155,6 +175,7 @@ no-food/
 ├── style.css     # Aussehen des HUD und der Anzeige-Elemente (kein Spiel-Rendering)
 ├── js/
 │   └── game.js   # Browser-Client: Eingabe, Netzwerk, Zeichnen (eine Datei, keine Module)
+├── assets/       # Sprite-Bilder (Hase, Spinne, Wolf + die vier Holz-Werkzeuge)
 ├── server.js     # Server: statische Dateien + autoritative Spiel-Logik + WebSocket-Protokoll
 ├── package.json  # npm start + einzige Abhängigkeit (ws)
 └── .gitignore    # node_modules/
@@ -205,11 +226,14 @@ manuell im Browser:
 1. `npm start`, dann `http://localhost:3000` in **zwei Browserfenstern** öffnen,
    Browser-Konsole auf Fehler prüfen.
 2. Kernabläufe durchspielen: Beitreten mit Namen, Laufen (WASD/Pfeiltasten),
-   Schlagen/Sammeln (Linksklick auf Baum/Stein/Goldader/Strauch), Beere essen (E),
-   Verhungern bis zum Todes-Bildschirm, Neustart über den Button.
+   Schlagen/Sammeln (Linksklick auf Baum/Stein/Erz/Strauch), Beere essen (E),
+   Verhungern bis zum Todes-Bildschirm, Neustart über den Button. Kollision
+   prüfen: Bäume, Steine, Erze und Sträucher blockieren (kein Durchlaufen
+   mehr, man rutscht an ihnen entlang).
 3. Multiplayer prüfen: beide Fenster sehen die Figur des anderen mit Namen,
    Beerenstände der Büsche sind in beiden Fenstern gleich, ein geschlossenes
-   Fenster lässt die Figur im anderen verschwinden.
+   Fenster lässt die Figur im anderen verschwinden. Zwei Spieler blockieren
+   sich gegenseitig (weiches Auseinanderschieben, niemand landet im Ozean).
 
 ## Deployment
 
@@ -220,8 +244,9 @@ CI/CD-Prozess.
 
 ## Sicherheit und sonstige Hinweise
 
-- Der statische Dateiserver liefert **nur** die fest eingetragenen drei Dateien
-  aus (`FILES`-Liste in `server.js`) — bei neuen Client-Dateien die Liste
+- Der statische Dateiserver liefert **nur** die fest eingetragenen Dateien
+  aus (`FILES`-Liste in `server.js`: die drei Spieldateien plus die
+  Sprite-PNGs aus `assets/`) — bei neuen Client-Dateien die Liste
   erweitern, niemals beliebige Pfade durchreichen.
 - WebSocket-Nachrichten sind auf 16 KB begrenzt (`maxPayload`) und werden
   serverseitig validiert (Booleans/Zahlen geprüft, Namen auf 16 Zeichen

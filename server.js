@@ -12,7 +12,7 @@
 //   3. Statischer Dateiserver (liefert index.html, style.css, game.js)
 //   4. Welt (Biome, Ressourcen, Tiere + Tag/Nacht)
 //   5. Spieler-Verwaltung (Inventar, beitreten, essen, crafting, respawn)
-//   6. Spiel-Logik (Tick: Bewegung, Schlagen, Hunger, Tiere, Lagerfeuer)
+//   6. Spiel-Logik (Tick: Bewegung, Kollision, Schlagen, Hunger, Tiere, Lagerfeuer)
 //   7. Netzwerk (Nachrichten empfangen und an alle senden)
 //   8. Spiel-Schleife (Server-Tick)
 // ============================================================
@@ -718,6 +718,11 @@ function update(dt) {
       dy *= 0.7071;
     }
 
+    // Alte Position merken — falls die Kollision den Spieler später
+    // in den Ozean schieben würde, geht es hierher zurück
+    const oldX = player.x;
+    const oldY = player.y;
+
     // Im Fluss ist man langsamer unterwegs (wie in flachem Wasser waten)
     const speed = inRiver(player.x, player.y)
       ? CONFIG.playerSpeed * CONFIG.riverSpeedMultiplier
@@ -735,6 +740,34 @@ function update(dt) {
     // Nicht aus der Welt herauslaufen
     player.x = clamp(player.x, CONFIG.playerRadius, CONFIG.worldSize - CONFIG.playerRadius);
     player.y = clamp(player.y, CONFIG.playerRadius, CONFIG.worldSize - CONFIG.playerRadius);
+
+    // --- Kollision mit Ressourcen ---
+    // Bäume, Steine, Erze und Sträucher haben Hitboxen: man kann nicht mehr
+    // durch sie hindurchlaufen. Überlappt der Spieler eine Ressource, wird er
+    // auf ihren Rand zurückgeschoben (so rutscht man an ihr entlang).
+    for (const res of resources) {
+      const minDist = CONFIG.playerRadius + res.radius;
+      const ddx = player.x - res.x;
+      if (ddx > minDist || ddx < -minDist) continue;   // grober Vorab-Check …
+      const ddy = player.y - res.y;
+      if (ddy > minDist || ddy < -minDist) continue;   // … spart das Wurzelziehen
+      const d = Math.hypot(ddx, ddy);
+      if (d < minDist) {
+        // Auf den Rand schieben (steht er genau mittig drin: nach rechts)
+        const ux = d > 0.001 ? ddx / d : 1;
+        const uy = d > 0.001 ? ddy / d : 0;
+        player.x = res.x + ux * minDist;
+        player.y = res.y + uy * minDist;
+      }
+    }
+
+    // Durchs Zurückschieben weder aus der Welt noch in den Ozean geraten
+    player.x = clamp(player.x, CONFIG.playerRadius, CONFIG.worldSize - CONFIG.playerRadius);
+    player.y = clamp(player.y, CONFIG.playerRadius, CONFIG.worldSize - CONFIG.playerRadius);
+    if (biomeAt(player.x, player.y).name === "ocean") {
+      player.x = oldX;
+      player.y = oldY;
+    }
 
     // --- Schlag-Sperre herunterzählen ---
     player.hitTimer = Math.max(0, player.hitTimer - dt);
@@ -783,6 +816,38 @@ function update(dt) {
     if (player.health <= 0) {
       player.health = 0;
       player.dead = true;
+    }
+  }
+
+  // --- Kollision Spieler gegen Spieler ---
+  // Zwei lebende Spieler dürfen sich nicht überlappen: sie werden je zur
+  // Hälfte auseinandergeschoben (weich gelöst, damit niemand festklemmt).
+  // Tote Spieler blockieren nicht. Keiner wird dabei in den Ozean geschoben.
+  const alive = [];
+  for (const p of players.values()) {
+    if (!p.dead) alive.push(p);
+  }
+  for (let i = 0; i < alive.length; i++) {
+    for (let j = i + 1; j < alive.length; j++) {
+      const a = alive[i];
+      const b = alive[j];
+      const minDist = CONFIG.playerRadius * 2;
+      const ddx = b.x - a.x;
+      if (ddx > minDist || ddx < -minDist) continue;
+      const ddy = b.y - a.y;
+      if (ddy > minDist || ddy < -minDist) continue;
+      const d = Math.hypot(ddx, ddy);
+      if (d < minDist) {
+        const ux = d > 0.001 ? ddx / d : 1;
+        const uy = d > 0.001 ? ddy / d : 0;
+        const push = (minDist - d) / 2;
+        const ax = a.x - ux * push;
+        const ay = a.y - uy * push;
+        if (biomeAt(ax, ay).name !== "ocean") { a.x = ax; a.y = ay; }
+        const bx = b.x + ux * push;
+        const by = b.y + uy * push;
+        if (biomeAt(bx, by).name !== "ocean") { b.x = bx; b.y = by; }
+      }
     }
   }
 

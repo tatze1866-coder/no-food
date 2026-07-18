@@ -59,6 +59,7 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 - 🗺️ Die Karte hat drei **Biome**: **Wald** (unten links, hier startest du),
   **Schnee** (oben — karg, aber mehr Steine) und **Ozean** (unten rechts —
   nicht begehbar)
+- 🏞️ Durch den **Wald** fließt ein **Fluss** — darin läufst du langsamer
 - 🌳 **Bäume** schlagen gibt **Holz**
 - 🐇 **Hasen** (Wald) sind harmlos und fliehen vor dir — jage sie für **Fleisch** 🍗
   (sättigt mehr als Beeren; Fleisch essen ebenfalls mit **E**)
@@ -69,14 +70,18 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 - ❄️ **Kälte** steigt nachts und im Schnee — bei voller Kälteanzeige verlierst
   du Leben! Wärme dich am **Lagerfeuer** (mit **F** oder per Hotbar setzen)
 - 🪨 **Steine** schlagen gibt **Stein**
-- 🪙 **Goldadern** (Wald und Schnee) schlagen gibt **Gold**
+- ⚙️ **Eisenerz** findest du viel im **Wald** (wenig im Schnee), 🥇 **Golderz**
+  viel im **Schnee** (wenig im Wald) — schlagen gibt das Erz
 - 💎 **Diamanten** findest du nur im **Schnee** — schlagen gibt **Diamant**
-- 🪓 **Werkzeuge** baust du im Bau-Menü (**C**) in vier Stufen: **Holz →
-  Stein → Gold → Diamant**. Jede Stufe kostet Rohstoffe **plus das Werkzeug
-  der Vorstufe** — dafür sammelt sie mehr pro Schlag: Die Axt bringt +2
-  **Holz** pro Stufe (Holzaxt 3, Diamantaxt 9), die Spitzhacke +2 **Stein**
-  sowie +1 **Gold**/**Diamant** pro Stufe
+- 🪓 **Werkzeuge** baust du im Bau-Menü (**C**) in fünf Stufen: **Holz →
+  Stein → Eisen → Gold → Diamant**. Jede Stufe kostet Rohstoffe **plus das
+  Werkzeug der Vorstufe** — dafür ist sie stärker: Die **Axt** bringt +2
+  **Holz** pro Stufe (Holzaxt 3, Diamantaxt 11), die **Spitzhacke** +2
+  **Stein** sowie +1 **Erz**/**Diamant** pro Stufe, **Schwert** (+8) und
+  **Speer** (+12) machen mehr **Schaden** pro Stufe — der Speer am meisten
 - 🍓 **Beerensträucher** schlagen gibt **Beeren** (wachsen nach!)
+- 🚶 **Hitboxen**: Du kannst nicht mehr durch Bäume, Steine, Erze, Sträucher
+  — und auch nicht durch andere Spieler — hindurchlaufen
 - 🍖 Dein **Hunger** sinkt ständig — iss Beeren mit **E**
 - ❤️ Bei Hunger auf 0 verlierst du **Leben**. Bei vollem Bauch heilst du langsam.
 
@@ -87,6 +92,7 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 | `index.html` | Die Spielseite (Anzeige-Elemente wie Balken, Inventar, Start-Bildschirm) |
 | `style.css` | Aussehen der Anzeige (Farben, Balken, Menüs) |
 | `js/game.js` | Der Browser-Client: Eingabe, Netzwerk, Zeichnen |
+| `assets/` | Sprite-Bilder: Tiere (Hase, Spinne, Wolf) und die Holz-Werkzeuge |
 | `server.js` | Der Server: liefert die Dateien aus + rechnet die Spiellogik (Multiplayer) |
 | `package.json` | Start-Kommando (`npm start`) und die einzige Abhängigkeit (`ws`) |
 
@@ -97,8 +103,8 @@ und danach einfach den Server neu starten.
 ## Geplante Features (Ideen)
 
 - [ ] Warme Kleidung aus Fellen (Schutz vor Kälte)
-- [x] Crafting (Werkzeuge in vier Stufen: Holz → Stein → Gold → Diamant)
-- [x] Gold und Diamant als neue Rohstoffe (Diamant nur im Schnee)
+- [x] Crafting (Werkzeuge in fünf Stufen: Holz → Stein → Eisen → Gold → Diamant)
+- [x] Eisenerz, Golderz und Diamant als neue Rohstoffe (Diamant nur im Schnee)
 - [x] Werkzeuge sammeln schneller (höhere Stufe = mehr pro Schlag)
 - [x] Kälte nachts und im Schnee (Lagerfeuer wärmt!)
 - [x] Tag/Nacht-Wechsel
