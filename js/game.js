@@ -29,6 +29,7 @@ const CONFIG = {
   maxHunger: 100,
   capacity: 20,
   biomes: [],   // Biom-Rechtecke inkl. Farbe — kommen beim Beitritt vom Server
+  rivers: [],   // Fluss-Linien inkl. Breite — kommen beim Beitritt vom Server
 };
 
 // Kataloge vom Server (kommen beim Beitritt in der "welcome"-Nachricht):
@@ -457,13 +458,14 @@ function updateInventory(me) {
 
     if (id) {
       const item = ITEMS[id];
+      slot.title = item.name;
       html += '<span class="icon">' + itemIconHtml(id) + "</span><span>" + inv[id] + "</span>";
 
       // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
       if (item.tool) {
         slot.classList.add("tool");
         if (me.equipped === id) slot.classList.add("equipped");
-        slot.title = "Klicken zum Ausrüsten";
+        slot.title = item.name + " – Klicken zum Ausrüsten";
         slot.addEventListener("click", () => {
           sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
         });
@@ -587,6 +589,7 @@ function render() {
   ctx.translate(-camera.x, -camera.y);
 
   drawGrid();
+  drawRivers();
   drawWorldBorder();
 
   // Ressourcen, Lagerfeuer, Tiere und Spieler nach Y-Position sortieren,
@@ -676,6 +679,45 @@ function drawGrid() {
   }
 }
 
+// Flüsse zeichnen: breite blaue Linie mit dunklerem Rand (wie Ufer) und
+// ein paar hellen "Glitzer"-Strichen, die sich langsam bewegen.
+function drawRivers() {
+  if (!CONFIG.rivers) return;
+  const shimmerOffset = (performance.now() / 400) % 40;
+
+  for (const river of CONFIG.rivers) {
+    const pts = river.points;
+    if (!pts || pts.length < 2) continue;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // Ufer (dunkler, etwas breiter als das Wasser selbst)
+    ctx.strokeStyle = "#1565a8";
+    ctx.lineWidth = river.width + 10;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+
+    // Wasserfläche
+    ctx.strokeStyle = "#2ba0e0";
+    ctx.lineWidth = river.width;
+    ctx.stroke();
+
+    // Glitzer-Streifen: helle gestrichelte Linie, die leicht "fließt"
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.lineWidth = river.width * 0.18;
+    ctx.setLineDash([18, 22]);
+    ctx.lineDashOffset = -shimmerOffset;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.restore();
+  }
+}
+
 // Dunkler Rand am Ende der Welt
 function drawWorldBorder() {
   ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
@@ -751,6 +793,53 @@ function drawResource(res) {
       ctx.fill();
       ctx.stroke();
     }
+  } else if (res.type === "iron_ore") {
+    // Gestein mit rostig-braunen Eisenadern
+    ctx.fillStyle = "#8d8d8d";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#b5651d";
+    for (let i = 0; i < 3; i++) {
+      const angle = (i / 3) * Math.PI * 2 + 0.4;
+      const ox = x + Math.cos(angle) * res.radius * 0.45;
+      const oy = y + Math.sin(angle) * res.radius * 0.45;
+      ctx.beginPath();
+      ctx.arc(ox, oy, res.radius * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (res.type === "gold_ore") {
+    // Gestein mit glänzenden Gold-Nuggets
+    ctx.fillStyle = "#9e9e9e";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffd700";
+    ctx.strokeStyle = "#c9a600";
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 3; i++) {
+      const angle = (i / 3) * Math.PI * 2 + 0.4;
+      const ox = x + Math.cos(angle) * res.radius * 0.45;
+      const oy = y + Math.sin(angle) * res.radius * 0.45;
+      ctx.beginPath();
+      ctx.arc(ox, oy, res.radius * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -980,6 +1069,25 @@ function drawMinimap() {
   } else {
     ctx.fillStyle = "#3d8b3d";
     ctx.fillRect(x0, y0, size, size);
+  }
+
+  // Flüsse als dünne blaue Linien
+  if (CONFIG.rivers) {
+    ctx.strokeStyle = "#2ba0e0";
+    ctx.lineCap = "round";
+    for (const river of CONFIG.rivers) {
+      const pts = river.points;
+      if (!pts || pts.length < 2) continue;
+      ctx.lineWidth = Math.max(1.5, river.width * scale);
+      ctx.beginPath();
+      const p0 = worldToMinimap(pts[0].x, pts[0].y, x0, y0, scale);
+      ctx.moveTo(p0.x, p0.y);
+      for (let i = 1; i < pts.length; i++) {
+        const p = worldToMinimap(pts[i].x, pts[i].y, x0, y0, scale);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
   }
 
   // Tiere als kleine rötliche Punkte (grobe Gefahren-/Beute-Übersicht)
