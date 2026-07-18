@@ -324,6 +324,16 @@ function applyState(msg) {
     }
   }
 
+  // Geänderte Erz-Vorkommen: neuer Vorrat + kurz wackeln (abgebaut oder nachgewachsen)
+  if (msg.ores) {
+    for (const [index, amount] of msg.ores) {
+      if (resources[index]) {
+        resources[index].amount = amount;
+        resources[index].shake = 1;
+      }
+    }
+  }
+
   // Lagerfeuer (kommen komplett in jedem state mit)
   if (msg.structures) structures = msg.structures;
 }
@@ -756,24 +766,6 @@ function drawResource(res) {
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.32, y - res.radius * 0.35, res.radius * 0.4, 0, Math.PI * 2);
     ctx.fill();
-  } else if (res.type === "rock") {
-    ctx.fillStyle = "#bdbdbd";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Kleine Details auf dem Stein
-    ctx.fillStyle = "#8d8d8d";
-    ctx.beginPath();
-    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.22, 0, Math.PI * 2);
-    ctx.fill();
-    // Glanzlicht
-    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
-    ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.28, 0, Math.PI * 2);
-    ctx.fill();
   } else if (res.type === "bush") {
     // Strauch
     ctx.fillStyle = "#4caf50";
@@ -796,54 +788,106 @@ function drawResource(res) {
       ctx.fill();
       ctx.stroke();
     }
-  } else if (res.type === "iron_ore") {
-    // Gestein mit rostig-braunen Eisenadern
-    ctx.fillStyle = "#8d8d8d";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+  } else if (res.type === "rock" || res.type === "gold_ore" || res.type === "diamond") {
+    drawOreDeposit(res, x, y);
+  }
+}
+
+// In welchem Biom liegt dieser Punkt? ("forest"/"snow"/"ocean" oder null)
+// Nutzt dieselbe Biom-Liste, die auch den Hintergrund einfärbt.
+function biomeAt(px, py) {
+  for (const b of CONFIG.biomes) {
+    if (px >= b.x && px < b.x + b.w && py >= b.y && py < b.y + b.h) return b.name;
+  }
+  return null;
+}
+
+// Ein Achteck-Pfad zeichnen (Grundform für Stein-/Gold-Nuggets, wie im Wiki-Icon)
+function octagonPath(x, y, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const angle = (Math.PI / 4) * i + Math.PI / 8;
+    const px = x + Math.cos(angle) * r;
+    const py = y + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+// Stein-, Gold- und Diamant-Vorkommen zeichnen. Farbe hängt vom Biom ab
+// (im Schnee heller/blasser, wie im Wiki: zwei sichtbar unterschiedliche
+// Varianten pro Vorkommen). Fast leere Vorkommen wirken etwas blasser.
+function drawOreDeposit(res, x, y) {
+  const biome = biomeAt(res.x, res.y);
+  const fullness = res.maxAmount > 0 ? clamp01(res.amount / res.maxAmount) : 1;
+  const alpha = 0.55 + 0.45 * fullness; // fast leer -> etwas ausgeblichen
+
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.strokeStyle = "#000";
+
+  if (res.type === "rock") {
+    ctx.lineWidth = 4;
+    ctx.fillStyle = biome === "snow" ? "#e2ebea" : "#8f9a86";
+    octagonPath(x, y, res.radius);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#b5651d";
-    for (let i = 0; i < 3; i++) {
-      const angle = (i / 3) * Math.PI * 2 + 0.4;
-      const ox = x + Math.cos(angle) * res.radius * 0.45;
-      const oy = y + Math.sin(angle) * res.radius * 0.45;
-      ctx.beginPath();
-      ctx.arc(ox, oy, res.radius * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    // Facetten-Schattierung (dunklerer Achteck-Ausschnitt unten rechts)
+    ctx.fillStyle = biome === "snow" ? "#c7d4d2" : "#767f6d";
+    ctx.beginPath();
+    ctx.arc(x + res.radius * 0.22, y + res.radius * 0.28, res.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    // Glanzlicht
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
     ctx.fill();
   } else if (res.type === "gold_ore") {
-    // Gestein mit glänzenden Gold-Nuggets
-    ctx.fillStyle = "#9e9e9e";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+    ctx.lineWidth = 4;
+    ctx.fillStyle = biome === "snow" ? "#ece1a6" : "#a89a3f";
+    octagonPath(x, y, res.radius);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#ffd700";
-    ctx.strokeStyle = "#c9a600";
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < 3; i++) {
-      const angle = (i / 3) * Math.PI * 2 + 0.4;
-      const ox = x + Math.cos(angle) * res.radius * 0.45;
-      const oy = y + Math.sin(angle) * res.radius * 0.45;
-      ctx.beginPath();
-      ctx.arc(ox, oy, res.radius * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.fillStyle = biome === "snow" ? "#dfd189" : "#8f8230";
+    ctx.beginPath();
+    ctx.arc(x + res.radius * 0.22, y + res.radius * 0.28, res.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
     ctx.fill();
+  } else if (res.type === "diamond") {
+    // Kristall-Cluster: drei spitze Kristalle unterschiedlicher Höhe
+    ctx.lineWidth = 3.5;
+    ctx.fillStyle = "#5fd8cf";
+    const shard = (dx, h, w) => {
+      ctx.beginPath();
+      ctx.moveTo(x + dx, y + res.radius * 0.5);
+      ctx.lineTo(x + dx - w, y + res.radius * 0.5 - h * 0.55);
+      ctx.lineTo(x + dx, y - res.radius * 0.5 - h);
+      ctx.lineTo(x + dx + w, y + res.radius * 0.5 - h * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    };
+    shard(-res.radius * 0.45, res.radius * 1.15, res.radius * 0.32);
+    shard(res.radius * 0.15, res.radius * 1.55, res.radius * 0.4);
+    shard(res.radius * 0.65, res.radius * 0.95, res.radius * 0.28);
+    // Facetten-Glanz
+    ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
+    ctx.beginPath();
+    ctx.moveTo(x - res.radius * 0.05, y - res.radius * 1.4);
+    ctx.lineTo(x + res.radius * 0.15, y - res.radius * 0.5);
+    ctx.lineTo(x - res.radius * 0.15, y - res.radius * 0.5);
+    ctx.closePath();
+    ctx.fill();
   }
+  ctx.restore();
+}
+
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
 }
 
 // Ein Lagerfeuer zeichnen: Holzscheite + flackernde Flamme
@@ -892,7 +936,7 @@ function drawStructure(s) {
 // arcticFox/polarBear/mammoth: neue, eng zugeschnittene quadratische Sprites.
 const SPRITE_SCALE = {
   rabbit: 8.5, wolf: 13, spider: 26,
-  arcticFox: 3.0, polarBear: 3.0, mammoth: 3.1,
+  arcticFox: 7.5, polarBear: 7.5, mammoth: 3.1,
 };
 
 // Ein Tier zeichnen (Hase, Spinne, Wolf, Polarfuchs, Eisbär, Mammut).
