@@ -57,6 +57,11 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
   **Schnee** (oben — karg, aber mehr Steine) und **Ozean** (unten rechts —
   nicht begehbar)
 - 🌳 **Bäume** schlagen gibt **Holz**
+- 🐇 **Hasen** (Wald) sind harmlos und fliehen vor dir — jage sie für **Fleisch** 🍗
+  (sättigt mehr als Beeren; Fleisch essen ebenfalls mit **E**)
+- 🐺 **Wölfe** (Wald) und 🐻‍❄️ **Eisbären** (Schnee) jagen **dich** — schlage zurück oder lauf weg!
+- 🕷️ **Spinnen** (Wald) sind tagsüber friedlich, aber **nachts** feindlich
+- 🌙 **Tag und Nacht** wechseln sich ab — nachts wird es dunkel
 - 🪨 **Steine** schlagen gibt **Stein**
 - 🍓 **Beerensträucher** schlagen gibt **Beeren** (wachsen nach!)
 - 🍖 Dein **Hunger** sinkt ständig — iss Beeren mit **E**
@@ -80,6 +85,7 @@ und danach einfach den Server neu starten.
 
 - [ ] Crafting (Werkzeuge aus Holz + Stein bauen)
 - [ ] Werkzeuge sammeln schneller
-- [ ] Tag/Nacht-Wechsel und Kälte (Lagerfeuer!)
-- [ ] Tiere (Jagd und Gefahr)
+- [ ] Kälte nachts (Lagerfeuer!)
+- [x] Tag/Nacht-Wechsel
+- [x] Tiere (Jagd und Gefahr)
 - [x] Multiplayer über das Internet

@@ -11,7 +11,7 @@
 //   2. Hilfsfunktionen
 //   3. Eingabe (Tastatur + Maus)
 //   4. Netzwerk (WebSocket: senden und empfangen)
-//   5. Spielstand (Welt + Spieler, wie der Server sie meldet)
+//   5. Spielstand (Welt + Tiere + Spieler, wie der Server sie meldet)
 //   6. Spiel-Logik (Update: sanfte Bewegung, Kamera, Anzeige)
 //   7. Zeichnen (Render)
 //   8. Spiel-Schleife
@@ -79,7 +79,8 @@ function currentInput() {
 // (die gleiche Liste steht oben in server.js — beide müssen zusammenpassen!).
 //
 // Browser -> Server:  join, input, hit, eat, respawn
-// Server -> Browser:  welcome (inkl. Biome in config.biomes), state, playerLeft
+// Server -> Browser:  welcome (inkl. Biome in config.biomes),
+//                     state (inkl. Tiere + Tag/Nacht), playerLeft
 
 let ws = null;
 let joined = false;       // Sind wir im Spiel (welcome erhalten)?
@@ -167,11 +168,12 @@ function ownAngle() {
 }
 
 // ---------- 5. SPIELSTAND ----------
-// Die Welt und die Spieler, so wie der Server sie zuletzt gemeldet hat.
-// Jeder Spieler hat zusätzlich x/y (weich bewegte Anzeige-Position) und
-// tx/ty (Ziel-Position vom Server).
+// Die Welt, die Tiere und die Spieler, so wie der Server sie zuletzt
+// gemeldet hat. Jeder Spieler und jedes Tier hat zusätzlich x/y (weich
+// bewegte Anzeige-Position) und tx/ty (Ziel-Position vom Server).
 let resources = [];
 const players = new Map();
+const animals = new Map();
 
 // Kamera folgt der eigenen Figur
 const camera = { x: 0, y: 0 };
@@ -180,6 +182,8 @@ const camera = { x: 0, y: 0 };
 let punchAnim = 0;        // Animations-Fortschritt des eigenen Schlags (0 bis 1)
 let localHitTimer = 0;    // Sperre, damit Schläge nicht gespammt werden
 let deathShown = false;   // Ist der Todes-Bildschirm gerade sichtbar?
+let isNight = false;      // Sagt der Server gerade Nacht ist
+let nightAlpha = 0;       // Stärke der Nacht-Abdunklung (wird sanft bewegt)
 
 // Neuen Spielstand vom Server übernehmen
 function applyState(msg) {
@@ -200,9 +204,33 @@ function applyState(msg) {
     entry.wood = p.wood;
     entry.stone = p.stone;
     entry.berries = p.berries;
+    entry.meat = p.meat;
     entry.dead = p.dead;
     entry.survivalTime = p.survivalTime;
   }
+
+  // Tiere: genauso wie die Spieler weich bewegt (x/y Anzeige, tx/ty Ziel)
+  const seen = new Set();
+  for (const a of msg.animals) {
+    seen.add(a.id);
+    let entry = animals.get(a.id);
+    if (!entry) {
+      entry = { x: a.x, y: a.y, tx: a.x, ty: a.y, shake: 0 };
+      animals.set(a.id, entry);
+    }
+    entry.tx = a.x;
+    entry.ty = a.y;
+    entry.species = a.species;
+    entry.angle = a.angle;
+    entry.radius = a.radius;
+  }
+  // Tiere, die der Server nicht mehr schickt (getötet), hier entfernen
+  for (const id of animals.keys()) {
+    if (!seen.has(id)) animals.delete(id);
+  }
+
+  // Tag oder Nacht?
+  isNight = msg.night === true;
 
   // Geänderte Büsche: neue Beeren-Zahl + kurz wackeln
   for (const [index, berries] of msg.bushes) {
@@ -238,11 +266,22 @@ function update(dt) {
     p.x += (p.tx - p.x) * schritt;
     p.y += (p.ty - p.y) * schritt;
   }
+  // Tiere genauso weich bewegen
+  for (const a of animals.values()) {
+    const schritt = Math.min(1, dt * 12);
+    a.x += (a.tx - a.x) * schritt;
+    a.y += (a.ty - a.y) * schritt;
+    a.shake = Math.max(0, a.shake - dt * 3);
+  }
 
   // --- Wackel-Animation der Ressourcen abklingen lassen ---
   for (const res of resources) {
     res.shake = Math.max(0, res.shake - dt * 3);
   }
+
+  // --- Nacht-Abdunklung sanft ein-/ausblenden ---
+  const nightTarget = isNight ? 0.45 : 0;
+  nightAlpha += (nightTarget - nightAlpha) * Math.min(1, dt * 2);
 
   // --- Kamera folgt der eigenen Figur ---
   if (me) {
@@ -255,7 +294,7 @@ function update(dt) {
 }
 
 // Wackel-Animation beim eigenen Schlag sofort anzeigen, ohne auf den
-// Server zu warten (sucht wie der Server die nächste Ressource).
+// Server zu warten (sucht wie der Server das nächste Ziel: Ressource oder Tier).
 function predictShake(me) {
   const hitX = me.x + Math.cos(ownAngle()) * CONFIG.reach;
   const hitY = me.y + Math.sin(ownAngle()) * CONFIG.reach;
@@ -269,6 +308,14 @@ function predictShake(me) {
       closestDist = d;
     }
   }
+  // Auch Tiere können getroffen werden
+  for (const a of animals.values()) {
+    const d = Math.hypot(hitX - a.x, hitY - a.y);
+    if (d < a.radius + 20 && d < closestDist) {
+      closest = a;
+      closestDist = d;
+    }
+  }
   if (closest) closest.shake = 1;
 }
 
@@ -278,6 +325,7 @@ function updateHUD(me) {
     document.getElementById("inv-wood").textContent = me.wood;
     document.getElementById("inv-stone").textContent = me.stone;
     document.getElementById("inv-berry").textContent = me.berries;
+    document.getElementById("inv-meat").textContent = me.meat;
 
     const healthPct = (me.health / CONFIG.maxHealth) * 100;
     const hungerPct = (me.hunger / CONFIG.maxHunger) * 100;
@@ -315,20 +363,28 @@ function render() {
   drawGrid();
   drawWorldBorder();
 
-  // Ressourcen und Spieler nach Y-Position sortieren,
+  // Ressourcen, Tiere und Spieler nach Y-Position sortieren,
   // damit weiter unten stehende Dinge "davor" gezeichnet werden
-  const drawList = [...resources, ...players.values()];
+  const drawList = [...resources, ...animals.values(), ...players.values()];
   drawList.sort((a, b) => a.y - b.y);
 
   for (const obj of drawList) {
     if (obj.name !== undefined) {
       drawPlayer(obj);
+    } else if (obj.species !== undefined) {
+      drawAnimal(obj);
     } else {
       drawResource(obj);
     }
   }
 
   ctx.restore();
+
+  // Nacht: dunkle Fläche über die ganze Szene legen
+  if (nightAlpha > 0.01) {
+    ctx.fillStyle = "rgba(10, 10, 40, " + nightAlpha + ")";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 }
 
 // Leichtes Gitter, damit man die Bewegung sieht
@@ -414,6 +470,100 @@ function drawResource(res) {
       ctx.fill();
     }
   }
+}
+
+// Ein Tier zeichnen (Hase, Spinne, Wolf, Eisbär).
+// Alle Tiere schauen in ihre Laufrichtung (angle), wie die Spieler.
+function drawAnimal(a) {
+  // Wackel-Effekt beim Treffer (wie bei den Ressourcen)
+  const shakeX = a.shake > 0 ? Math.sin(a.shake * 30) * 4 : 0;
+
+  ctx.save();
+  ctx.translate(a.x + shakeX, a.y);
+  ctx.rotate(a.angle || 0);
+  ctx.lineWidth = 3;
+
+  const r = a.radius;
+
+  if (a.species === "rabbit") {
+    // Ohren (hinten, oben und unten)
+    ctx.fillStyle = "#d7b98a";
+    ctx.strokeStyle = "#8d6e42";
+    ctx.beginPath();
+    ctx.arc(-r * 0.7, -r * 0.6, r * 0.35, 0, Math.PI * 2);
+    ctx.arc(-r * 0.7, r * 0.6, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Körper
+    ctx.fillStyle = "#c8a165";
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (a.species === "spider") {
+    // Beine (Striche nach allen Seiten)
+    ctx.strokeStyle = "#3e2723";
+    for (let i = 0; i < 8; i++) {
+      const legAngle = (i / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(legAngle) * r * 0.5, Math.sin(legAngle) * r * 0.5);
+      ctx.lineTo(Math.cos(legAngle) * r * 1.7, Math.sin(legAngle) * r * 1.7);
+      ctx.stroke();
+    }
+    // Körper
+    ctx.fillStyle = "#4e342e";
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Rote Augen (vorne)
+    ctx.fillStyle = "#e53935";
+    ctx.beginPath();
+    ctx.arc(r * 0.5, -r * 0.3, 3, 0, Math.PI * 2);
+    ctx.arc(r * 0.5, r * 0.3, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (a.species === "wolf") {
+    // Ohren (hinten)
+    ctx.fillStyle = "#78909c";
+    ctx.strokeStyle = "#455a64";
+    ctx.beginPath();
+    ctx.arc(-r * 0.4, -r * 0.8, r * 0.3, 0, Math.PI * 2);
+    ctx.arc(-r * 0.4, r * 0.8, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Körper
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Schnauze (vorne)
+    ctx.fillStyle = "#b0bec5";
+    ctx.beginPath();
+    ctx.arc(r * 0.85, 0, r * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (a.species === "bear") {
+    // Ohren (hinten)
+    ctx.fillStyle = "#eceff1";
+    ctx.strokeStyle = "#90a4ae";
+    ctx.beginPath();
+    ctx.arc(-r * 0.3, -r * 0.8, r * 0.3, 0, Math.PI * 2);
+    ctx.arc(-r * 0.3, r * 0.8, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Körper
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Schnauze (vorne)
+    ctx.fillStyle = "#cfd8dc";
+    ctx.beginPath();
+    ctx.arc(r * 0.8, 0, r * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
 function drawPlayer(p) {

@@ -23,6 +23,16 @@ Ressourcen-Anzahlen pro Biom stehen in `CONFIG` (`forestTrees`, `snowRocks`
 usw.). Die Biom-Liste geht per `welcome`-Nachricht (`config.biomes`) an den
 Client, der sie nur als Farb-Rechtecke zeichnet.
 
+In der Welt leben **Tiere**: Hasen (Wald, neutral, fliehen vor Spielern),
+Spinnen (Wald, nur **nachts** feindlich), Wölfe (Wald, immer feindlich) und
+Eisbären (Schnee, immer feindlich). Der Server hält einen **Tag/Nacht-Wechsel**
+(`worldTime`; `dayLength`/`nightLength` in `CONFIG`), die `state`-Nachricht
+enthält dafür `night` und die Liste `animals` (nur lebende Tiere). Feindliche
+Tiere verfolgen nur Spieler im eigenen Biom und beißen mit 1 s Sperre; getötete
+Tiere geben **Fleisch** (`meat` im Inventar, essen mit E — sättigt mehr als
+Beeren) und spawnen nach `animalRespawn` Sekunden neu. Die Tier-Werte stehen in
+`ANIMAL_TYPES` (Abschnitt 1), die KI in `updateAnimal()` (Abschnitt 6).
+
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
 
 An diesem Projekt arbeiten **mehrere verschiedene KI-Assistenten** (Claude und
@@ -182,9 +192,9 @@ CI/CD-Prozess.
   serverseitig validiert (Booleans/Zahlen geprüft, Namen auf 16 Zeichen
   gekürzt). Schläge sind serverseitig per `hitCooldown` begrenzt.
 - Beim Ändern der HUD-Elemente in `index.html` darauf achten, dass die IDs
-  (`inv-wood`, `inv-stone`, `inv-berry`, `health-fill`, `hunger-fill`,
+  (`inv-wood`, `inv-stone`, `inv-berry`, `inv-meat`, `health-fill`, `hunger-fill`,
   `survival-time`, `death-screen`, `restart-btn`, `player-count`,
   `start-screen`, `name-input`, `start-btn`, `start-status`) mit den Zugriffen
   in `js/game.js` übereinstimmen.
-- Geplante Features (siehe README.md): Crafting, Werkzeuge, Tag/Nacht-Wechsel,
-  Tiere. Multiplayer ist umgesetzt.
+- Geplante Features (siehe README.md): Crafting, Werkzeuge, Kälte/Lagerfeuer.
+  Multiplayer, Biome, Tag/Nacht-Wechsel und Tiere sind umgesetzt.

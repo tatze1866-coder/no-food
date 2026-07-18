@@ -10,9 +10,9 @@
 //   1. Einstellungen (alle Spielwerte — wie früher im Browser)
 //   2. Hilfsfunktionen
 //   3. Statischer Dateiserver (liefert index.html, style.css, game.js)
-//   4. Welt (Biome + Bäume, Steine, Büsche)
+//   4. Welt (Biome, Ressourcen, Tiere + Tag/Nacht)
 //   5. Spieler-Verwaltung (beitreten, verlassen, essen, respawn)
-//   6. Spiel-Logik (Tick: Bewegung, Schlagen, Hunger, Nachwachsen)
+//   6. Spiel-Logik (Tick: Bewegung, Schlagen, Hunger, Tiere, Nachwachsen)
 //   7. Netzwerk (Nachrichten empfangen und an alle senden)
 //   8. Spiel-Schleife (Server-Tick)
 // ============================================================
@@ -48,6 +48,30 @@ const CONFIG = {
 
   bushBerries: 4,         // Beeren pro Strauch
   berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
+
+  // Tag/Nacht-Wechsel (in Sekunden): nach dayLength Tag kommt nightLength Nacht
+  dayLength: 120,
+  nightLength: 60,
+
+  // Tiere
+  playerDamage: 20,       // Schaden des Spieler-Schlags gegen Tiere
+  meatFood: 40,           // Wieviel Hunger ein Fleisch stillt (Beere: 22)
+  rabbitCount: 8,         // Hasen im Wald (neutral, fliehen)
+  spiderCount: 5,         // Spinnen im Wald (nur NACHTS feindlich)
+  wolfCount: 4,           // Wölfe im Wald (immer feindlich)
+  bearCount: 3,           // Eisbären im Schnee (immer feindlich)
+  animalRespawn: 30,      // Sekunden bis ein getötetes Tier neu spawnt
+  aggroRange: 260,        // Ab dieser Entfernung verfolgen feindliche Tiere
+  fleeRange: 150,         // Ab dieser Entfernung fliehen Hasen vor Spielern
+};
+
+// Tier-Arten mit ihren Werten (Verhalten, Kampf, Beute).
+// hostile: "never" = nie feindlich, "night" = nur nachts, "always" = immer.
+const ANIMAL_TYPES = {
+  rabbit: { biome: "forest", speed: 200, health: 20, damage: 0,  meat: 2, radius: 14, hostile: "never"  },
+  spider: { biome: "forest", speed: 220, health: 30, damage: 8,  meat: 1, radius: 14, hostile: "night"  },
+  wolf:   { biome: "forest", speed: 260, health: 40, damage: 10, meat: 2, radius: 18, hostile: "always" },
+  bear:   { biome: "snow",   speed: 230, health: 60, damage: 15, meat: 3, radius: 24, hostile: "always" },
 };
 
 const TICKS_PER_SECOND = 20;   // Wie oft pro Sekunde der Server rechnet
@@ -176,6 +200,47 @@ function createWorld() {
       regrowTimer: 0,
     });
   }
+
+  spawnAnimals();
+}
+
+// ---------- Tiere ----------
+// Tiere leben wie Ressourcen in der Welt, bewegen sich aber selbst.
+// worldTime zählt die Sekunden seit Server-Start (für Tag/Nacht).
+let animals = [];
+let nextAnimalId = 1;
+let worldTime = 0;
+
+// Ist gerade Nacht? (Tag und Nacht wechseln sich immer ab)
+function isNight() {
+  const cycle = CONFIG.dayLength + CONFIG.nightLength;
+  return (worldTime % cycle) >= CONFIG.dayLength;
+}
+
+// Die Tiere der Welt erzeugen (pro Art die Anzahl aus der CONFIG)
+function spawnAnimals() {
+  animals = [];
+  for (const species in ANIMAL_TYPES) {
+    const type = ANIMAL_TYPES[species];
+    const biome = BIOMES.find((b) => b.name === type.biome);
+    const count = CONFIG[species + "Count"];
+    for (let i = 0; i < count; i++) {
+      const pos = randInBiome(biome, 80);
+      animals.push({
+        id: nextAnimalId++,
+        species: species,
+        x: pos.x,
+        y: pos.y,
+        angle: rand(0, Math.PI * 2),        // Blick-/Laufrichtung
+        health: type.health,
+        dead: false,
+        respawnTimer: 0,                    // Sekunden bis zum Neu-Spawn (wenn tot)
+        attackTimer: 0,                     // Sperre zwischen zwei Angriffen
+        wanderAngle: rand(0, Math.PI * 2),  // aktuelle Richtung beim Wandern
+        wanderTimer: 0,                     // wann die Richtung wieder wechselt
+      });
+    }
+  }
 }
 
 // Die Welt so verpacken, wie sie ein neuer Browser beim Betreten braucht
@@ -210,6 +275,7 @@ function addPlayer(id, name) {
     wood: 0,
     stone: 0,
     berries: 0,
+    meat: 0,
     hitTimer: 0,        // Zeit bis zum nächsten möglichen Schlag
     dead: false,
     survivalTime: 0,    // Wie lange der Spieler schon lebt (Sekunden)
@@ -227,15 +293,20 @@ function resetPlayer(player) {
   player.wood = 0;
   player.stone = 0;
   player.berries = 0;
+  player.meat = 0;
   player.hitTimer = 0;
   player.dead = false;
   player.survivalTime = 0;
 }
 
-// Eine Beere aus dem Inventar essen
-function eatBerry(player) {
+// Essen aus dem Inventar essen: erst Fleisch (sättigt mehr), sonst Beere
+function eatFood(player) {
   if (player.dead) return;
-  if (player.berries > 0 && player.hunger < CONFIG.maxHunger) {
+  if (player.hunger >= CONFIG.maxHunger) return;
+  if (player.meat > 0) {
+    player.meat--;
+    player.hunger = clamp(player.hunger + CONFIG.meatFood, 0, CONFIG.maxHunger);
+  } else if (player.berries > 0) {
     player.berries--;
     player.hunger = clamp(player.hunger + CONFIG.berryFood, 0, CONFIG.maxHunger);
   }
@@ -244,6 +315,9 @@ function eatBerry(player) {
 // ---------- 6. SPIEL-LOGIK ----------
 // Läuft TICKS_PER_SECOND-mal pro Sekunde für alle Spieler zusammen.
 function update(dt) {
+  // Zeit läuft weiter (für den Tag/Nacht-Wechsel)
+  worldTime += dt;
+
   for (const player of players.values()) {
     if (player.dead) continue;
 
@@ -307,9 +381,87 @@ function update(dt) {
       }
     }
   }
+
+  // --- Tiere verhalten sich (jagen, fliehen, wandern) ---
+  for (const animal of animals) {
+    updateAnimal(animal, dt);
+  }
 }
 
-// Prüfen ob der Schlag eine Ressource trifft (wie früher im Browser)
+// Ein Tier bewegen — es bleibt dabei immer in seinem eigenen Biom
+function moveAnimal(animal, angle, speed, dt) {
+  const type = ANIMAL_TYPES[animal.species];
+  const biome = BIOMES.find((b) => b.name === type.biome);
+  animal.x += Math.cos(angle) * speed * dt;
+  animal.y += Math.sin(angle) * speed * dt;
+  animal.x = clamp(animal.x, biome.x + type.radius, biome.x + biome.w - type.radius);
+  animal.y = clamp(animal.y, biome.y + type.radius, biome.y + biome.h - type.radius);
+  animal.angle = angle;
+}
+
+// Das Verhalten eines Tiers (wird pro Tick aufgerufen)
+function updateAnimal(animal, dt) {
+  const type = ANIMAL_TYPES[animal.species];
+  const biome = BIOMES.find((b) => b.name === type.biome);
+
+  // Totes Tier: auf das Neu-Spawnen warten
+  if (animal.dead) {
+    animal.respawnTimer -= dt;
+    if (animal.respawnTimer <= 0) {
+      const pos = randInBiome(biome, 80);
+      animal.x = pos.x;
+      animal.y = pos.y;
+      animal.health = type.health;
+      animal.dead = false;
+    }
+    return;
+  }
+
+  animal.attackTimer = Math.max(0, animal.attackTimer - dt);
+
+  // Nächsten lebenden Spieler suchen — aber nur, wenn er im Biom des
+  // Tiers ist (so bleibt der Ozean sicher und Tiere laufen keinem
+  // Spieler über die ganze Karte hinterher)
+  let nearest = null;
+  let nearestDist = Infinity;
+  for (const player of players.values()) {
+    if (player.dead) continue;
+    if (biomeAt(player.x, player.y) !== biome) continue;
+    const d = dist(animal.x, animal.y, player.x, player.y);
+    if (d < nearestDist) {
+      nearest = player;
+      nearestDist = d;
+    }
+  }
+
+  // Ist das Tier gerade feindlich? (Spinnen nur nachts!)
+  const hostile = type.hostile === "always" || (type.hostile === "night" && isNight());
+
+  if (hostile && nearest && nearestDist < CONFIG.aggroRange) {
+    // Feindlich: zum Spieler laufen und beißen
+    const angle = Math.atan2(nearest.y - animal.y, nearest.x - animal.x);
+    if (nearestDist > type.radius + CONFIG.playerRadius) {
+      moveAnimal(animal, angle, type.speed, dt);
+    } else if (animal.attackTimer <= 0) {
+      animal.attackTimer = 1; // eine Sekunde Sperre zwischen zwei Bissen
+      nearest.health -= type.damage;
+    }
+  } else if (animal.species === "rabbit" && nearest && nearestDist < CONFIG.fleeRange) {
+    // Hase: vor dem Spieler weglaufen (Gegenrichtung)
+    const angle = Math.atan2(animal.y - nearest.y, animal.x - nearest.x);
+    moveAnimal(animal, angle, type.speed, dt);
+  } else {
+    // Wandern: alle paar Sekunden eine neue Zufallsrichtung, halbes Tempo
+    animal.wanderTimer -= dt;
+    if (animal.wanderTimer <= 0) {
+      animal.wanderTimer = rand(1, 3);
+      animal.wanderAngle = rand(0, Math.PI * 2);
+    }
+    moveAnimal(animal, animal.wanderAngle, type.speed / 2, dt);
+  }
+}
+
+// Prüfen ob der Schlag eine Ressource oder ein Tier trifft (wie früher im Browser)
 function tryHit(player) {
   if (player.dead || player.hitTimer > 0) return;
   player.hitTimer = CONFIG.hitCooldown;
@@ -318,9 +470,10 @@ function tryHit(player) {
   const hitX = player.x + Math.cos(player.angle) * CONFIG.reach;
   const hitY = player.y + Math.sin(player.angle) * CONFIG.reach;
 
-  // Die nächste Ressource in Reichweite finden
-  let closest = null;
+  // Das nächste Ziel in Reichweite finden: Ressource ODER Tier
+  let closest = null;        // Ressource
   let closestIndex = -1;
+  let closestAnimal = null;  // Tier
   let closestDist = Infinity;
   for (let i = 0; i < resources.length; i++) {
     const res = resources[i];
@@ -328,8 +481,32 @@ function tryHit(player) {
     if (d < res.radius + 20 && d < closestDist) {
       closest = res;
       closestIndex = i;
+      closestAnimal = null;
       closestDist = d;
     }
+  }
+  for (const animal of animals) {
+    if (animal.dead) continue;
+    const type = ANIMAL_TYPES[animal.species];
+    const d = dist(hitX, hitY, animal.x, animal.y);
+    if (d < type.radius + 20 && d < closestDist) {
+      closestAnimal = animal;
+      closest = null;
+      closestIndex = -1;
+      closestDist = d;
+    }
+  }
+
+  // Ein Tier getroffen: es verliert Leben und lässt Fleisch fallen
+  if (closestAnimal) {
+    const type = ANIMAL_TYPES[closestAnimal.species];
+    closestAnimal.health -= CONFIG.playerDamage;
+    if (closestAnimal.health <= 0) {
+      closestAnimal.dead = true;
+      closestAnimal.respawnTimer = CONFIG.animalRespawn;
+      player.meat += type.meat;
+    }
+    return;
   }
 
   if (!closest) return;
@@ -358,7 +535,7 @@ function tryHit(player) {
 // Server -> Browser:
 //   { t: "welcome", id, config, world }     Begrüßung: eigene Nummer,
 //                                           Einstellungen (inkl. Biome in config.biomes) + Welt
-//   { t: "state", players, bushes }         Spielstand (TICKS_PER_SECOND-mal/s)
+//   { t: "state", players, bushes, animals, night }   Spielstand (TICKS_PER_SECOND-mal/s)
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
 
 const wss = new WebSocketServer({ server: server, maxPayload: 16 * 1024 });
@@ -396,6 +573,7 @@ function stateMessage() {
       wood: p.wood,
       stone: p.stone,
       berries: p.berries,
+      meat: p.meat,
       dead: p.dead,
       survivalTime: Math.floor(p.survivalTime),
     });
@@ -408,7 +586,21 @@ function stateMessage() {
   }
   changedBushes.clear();
 
-  return { t: "state", players: playerList, bushes: bushList };
+  // Nur lebende Tiere mitschicken (tote tauchen erst nach dem Respawn wieder auf)
+  const animalList = [];
+  for (const a of animals) {
+    if (a.dead) continue;
+    animalList.push({
+      id: a.id,
+      species: a.species,
+      x: Math.round(a.x),
+      y: Math.round(a.y),
+      angle: Math.round(a.angle * 100) / 100,
+      radius: ANIMAL_TYPES[a.species].radius,
+    });
+  }
+
+  return { t: "state", players: playerList, bushes: bushList, animals: animalList, night: isNight() };
 }
 
 wss.on("connection", (ws) => {
@@ -467,7 +659,7 @@ wss.on("connection", (ws) => {
     } else if (msg.t === "hit") {
       tryHit(player);
     } else if (msg.t === "eat") {
-      eatBerry(player);
+      eatFood(player);
     } else if (msg.t === "respawn") {
       if (player.dead) resetPlayer(player);
     }
