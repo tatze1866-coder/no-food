@@ -1,0 +1,135 @@
+/* Grund-Layout: Das Spiel füllt das ganze Browserfenster */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  overflow: hidden;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #3d8b3d;
+  user-select: none;
+}
+
+#game {
+  display: block;
+  cursor: crosshair;
+}
+
+/* Inventar oben links */
+#inventory {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.slot {
+  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.slot .icon {
+  font-size: 22px;
+}
+
+/* Lebens- und Hungerbalken unten in der Mitte */
+#bars {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 280px;
+}
+
+.bar {
+  position: relative;
+  height: 26px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 13px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  width: 100%;
+  transition: width 0.2s;
+  border-radius: 11px;
+}
+
+.fill.health { background: linear-gradient(#ff6b6b, #d32f2f); }
+.fill.hunger { background: linear-gradient(#ffb74d, #ef6c00); }
+
+.bar-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Hilfe-Text unten */
+#help {
+  position: fixed;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+/* Todes-Bildschirm */
+#death-screen {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #fff;
+}
+
+#death-screen.hidden {
+  display: none;
+}
+
+#death-screen h1 {
+  font-size: 42px;
+  color: #ff5252;
+}
+
+#restart-btn {
+  padding: 12px 32px;
+  font-size: 20px;
+  font-weight: bold;
+  color: #fff;
+  background: #43a047;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+#restart-btn:hover {
+  background: #2e7d32;
+}
