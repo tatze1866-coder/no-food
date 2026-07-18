@@ -737,7 +737,9 @@ function drawAnimal(a) {
 
     // Sprite-Bild verwenden (ersetzt die frühere Vektor-Zeichnung)
     const img = animalImages[a.species];
-    const size = r * 6.5; // Sprite deutlich größer als der Kollisionsradius zeichnen (2.5x von vorher)
+    // Jede Art hat ihre eigene Größe (Vielfaches des Kollisionsradius)
+    const SPRITE_SCALE = { rabbit: 8.5, wolf: 13, spider: 13 };
+    const size = r * (SPRITE_SCALE[a.species] || 6.5);
     if (img && img.complete && img.naturalWidth > 0) {
       const aspect = img.naturalWidth / img.naturalHeight;
       const h = size;
