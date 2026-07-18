@@ -2,6 +2,28 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-18 — Zusammenführung: Diamant + 5-Stufen-Werkzeuge (Branch `main`)
+
+Das beste aus zwei parallelen Arbeiten kombiniert (Kollege + Kimi): der Kollege
+hatte Werkzeug-Stufen (Holz/Eisen/Gold für Axt, Spitzhacke, Schwert, Speer),
+Kimi hatte Diamant als neuen Rohstoff und eine saubere Werkzeug-Kette.
+
+### Hinzugefügt
+- **Diamant** (💎): neuer, seltenster Rohstoff — kommt **nur im Schnee-Biom** vor
+  (`snowDiamond` in `CONFIG`), eisblauer Kristall mit heller Raute (von Kimi).
+- **Fünf Werkzeug-Stufen** für alle vier Werkzeugarten (Axt, Spitzhacke,
+  Schwert, Speer): **Holz → Stein → Eisen → Gold → Diamant** (20 Werkzeuge).
+- **Werkzeug-Kette** (Idee von Kimi): jede höhere Stufe braucht das Werkzeug der
+  Vorstufe als Zutat + das neue Material. Man arbeitet sich Schritt für Schritt
+  hoch. Wird das ausgerüstete Werkzeug beim Bauen verbraucht, wird es automatisch
+  aus der Hand gelegt.
+
+### Geändert
+- **Ertrag/Schaden über Stufen-Formel** statt vieler Einzelabfragen: Ertrag bzw.
+  Schaden = Grundwert + Stufe × Bonus. Neue `TOOLS`-Tabelle (kind + tier) in
+  `server.js`; `tryHit()` nutzt sie. Spitzhacke baut Stein, Eisenerz, Golderz und
+  Diamant ab; Speer macht mehr Schaden als das Schwert.
+
 ## Unveröffentlicht (Branch `kimi`)
 
 ### Hinzugefügt

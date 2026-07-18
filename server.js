@@ -46,10 +46,15 @@ const CONFIG = {
   snowTrees: 375,         // Bäume im Schnee (karger, dafür mehr Steine)
   snowRocks: 375,         // Steine im Schnee
   snowBushes: 150,        // Beerensträucher im Schnee
-  forestGold: 100,        // Goldadern im Wald
-  snowGold: 150,          // Goldadern im Schnee
-  snowDiamond: 70,        // Diamanten im Schnee (gibt es nur dort)
   // Der Ozean bekommt absichtlich keine Ressourcen.
+
+  // Erz: in BEIDEN Biomen vorhanden, aber unterschiedlich verteilt —
+  // im Wald (unten) gibt's mehr Eisen, im Schnee (oben) mehr Gold.
+  forestIronOre: 130,     // Eisenerz im Wald: häufig
+  forestGoldOre: 35,      // Golderz im Wald: selten
+  snowGoldOre: 130,       // Golderz im Schnee: häufig
+  snowIronOre: 35,        // Eisenerz im Schnee: selten
+  snowDiamond: 70,        // Diamanten (von Kimi): NUR im Schnee, die seltenste Ressource
 
   bushBerries: 4,         // Beeren pro Strauch
   berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
@@ -77,13 +82,18 @@ const CONFIG = {
   backpackCapacity: 40,   // Obergrenze mit Rucksack
   woodPerHit: 1,          // Holz pro Baum-Schlag mit bloßer Hand
   stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
-  goldPerHit: 1,          // Gold pro Goldader-Schlag mit bloßer Hand
-  diamondPerHit: 1,       // Diamant pro Diamant-Schlag mit bloßer Hand
-  axeWoodBonus: 2,        // Extra-Holz pro Axt-Stufe (Holz=1 … Diamant=4)
-  pickaxeStoneBonus: 2,   // Extra-Stein pro Spitzhacken-Stufe (Holz=1 … Diamant=4)
-  pickaxeGoldBonus: 1,    // Extra-Gold pro Spitzhacken-Stufe (Holz=1 … Diamant=4)
-  pickaxeDiamondBonus: 1, // Extra-Diamant pro Spitzhacken-Stufe (Holz=1 … Diamant=4)
-  spearDamageBonus: 20,   // Extra-Schaden gegen Tiere mit ausgerüstetem Speer
+  orePerHit: 1,           // Erz/Gold/Diamant pro Schlag mit bloßer Hand
+
+  // Werkzeug-Stufen (Stufe 1 = Holz, 2 = Stein, 3 = Eisen, 4 = Gold, 5 = Diamant).
+  // Ertrag bzw. Schaden = Grundwert + Stufe * Bonus. Jede höhere Stufe sammelt
+  // also mehr / schlägt härter zu — welches Werkzeug welche Stufe hat, steht in
+  // der TOOLS-Tabelle weiter unten. (Stufen-Idee von Kimi, hier auf alle vier
+  // Werkzeugarten und fünf Materialien erweitert.)
+  axeWoodBonus: 2,        // Extra-Holz je Axt-Stufe
+  pickaxeStoneBonus: 2,   // Extra-Stein je Spitzhacken-Stufe
+  pickaxeOreBonus: 1,     // Extra-Erz/Gold/Diamant je Spitzhacken-Stufe
+  swordDamageBonus: 8,    // Extra-Schaden je Schwert-Stufe
+  spearDamageBonus: 12,   // Extra-Schaden je Speer-Stufe (stärker als das Schwert)
   rawMeatFood: 25,        // Hunger durch rohes Fleisch (weniger als gebraten)
   cookedMeatFood: 40,     // Hunger durch gebratenes Fleisch
 
@@ -100,6 +110,10 @@ const CONFIG = {
   campfireWarmRate: 25,   // Kälte-Rückgang pro Sekunde am Lagerfeuer
   freezeDamage: 3,        // Leben pro Sekunde bei Kälte 100
   // ------------------------------------------------------------------
+
+  // Flüsse im Wald: begehbar, aber man läuft darin langsamer
+  riverWidth: 170,          // Breite eines Flusses in Pixeln
+  riverSpeedMultiplier: 0.55, // Geschwindigkeits-Faktor im Fluss (1 = normal)
 };
 
 // ---------- ITEMS: Katalog aller Gegenstände ----------
@@ -112,20 +126,39 @@ const ITEMS = {
   // Rohstoffe
   wood:        { name: "Holz",            icon: "🪵" },
   stone:       { name: "Stein",           icon: "🪨" },
-  gold:        { name: "Gold",            icon: "🪙" },
-  diamond:     { name: "Diamant",         icon: "💎" },
   berry:       { name: "Beere",           icon: "🍓", food: true },
+  iron_ore:    { name: "Eisenerz",        icon: "⚙️" },
+  gold_ore:    { name: "Golderz",         icon: "🥇" },
+  diamond:     { name: "Diamant",         icon: "💎" },
 
-  // Werkzeuge (ausrüstbar) — in 4 Stufen: Holz < Stein < Gold < Diamant
-  wood_axe:        { name: "Holzaxt",          icon: "🪓", tool: true },
-  stone_axe:       { name: "Steinaxt",         icon: "🪓", tool: true },
-  gold_axe:        { name: "Goldaxt",          icon: "🪓", tool: true },
-  diamond_axe:     { name: "Diamantaxt",       icon: "🪓", tool: true },
-  wood_pickaxe:    { name: "Holzspitzhacke",   icon: "⛏️", tool: true },
-  stone_pickaxe:   { name: "Steinspitzhacke",  icon: "⛏️", tool: true },
-  gold_pickaxe:    { name: "Goldspitzhacke",   icon: "⛏️", tool: true },
+  // Werkzeuge (ausrüstbar) — fünf Stufen pro Werkzeug:
+  //   Holz < Stein < Eisen < Gold < Diamant.
+  // "image" zeigt auf ein eigenes Icon-Bild statt des Emojis (icon bleibt
+  // als Fallback). Bisher gibt es Sprites nur für die Holz-Stufe; die
+  // höheren Stufen benutzen das Emoji.
+  wood_axe:        { name: "Holzaxt",        icon: "🪓", image: "assets/tool-axe.png",     tool: true },
+  stone_axe:       { name: "Steinaxt",       icon: "🪓", tool: true },
+  iron_axe:        { name: "Eisenaxt",       icon: "🪓", tool: true },
+  gold_axe:        { name: "Goldaxt",        icon: "🪓", tool: true },
+  diamond_axe:     { name: "Diamantaxt",     icon: "🪓", tool: true },
+
+  wood_pickaxe:    { name: "Holzspitzhacke",    icon: "⛏️", image: "assets/tool-pickaxe.png", tool: true },
+  stone_pickaxe:   { name: "Steinspitzhacke",   icon: "⛏️", tool: true },
+  iron_pickaxe:    { name: "Eisenspitzhacke",   icon: "⛏️", tool: true },
+  gold_pickaxe:    { name: "Goldspitzhacke",    icon: "⛏️", tool: true },
   diamond_pickaxe: { name: "Diamantspitzhacke", icon: "⛏️", tool: true },
-  spear:       { name: "Speer",           icon: "🔱", tool: true },
+
+  wood_sword:      { name: "Holzschwert",    icon: "🗡️", image: "assets/tool-sword.png", tool: true },
+  stone_sword:     { name: "Steinschwert",   icon: "🗡️", tool: true },
+  iron_sword:      { name: "Eisenschwert",   icon: "🗡️", tool: true },
+  gold_sword:      { name: "Goldschwert",    icon: "🗡️", tool: true },
+  diamond_sword:   { name: "Diamantschwert", icon: "🗡️", tool: true },
+
+  wood_spear:      { name: "Holzspeer",      icon: "🔱", image: "assets/tool-spear.png", tool: true },
+  stone_spear:     { name: "Steinspeer",     icon: "🔱", tool: true },
+  iron_spear:      { name: "Eisenspeer",     icon: "🔱", tool: true },
+  gold_spear:      { name: "Goldspeer",      icon: "🔱", tool: true },
+  diamond_spear:   { name: "Diamantspeer",   icon: "🔱", tool: true },
 
   // Platzierbar / Upgrade
   campfire:    { name: "Lagerfeuer",      icon: "🔥" },
@@ -144,15 +177,38 @@ const ITEMS = {
 // ---------- RECIPES: Crafting-Rezepte ----------
 // Jedes Rezept: was es kostet (cost) und was dabei herauskommt (result).
 const RECIPES = {
-  wood_axe:        { name: "Holzaxt",          cost: { wood: 3 },                            result: { wood_axe: 1 } },
-  stone_axe:       { name: "Steinaxt",         cost: { wood: 2, stone: 3, wood_axe: 1 },     result: { stone_axe: 1 } },
-  gold_axe:        { name: "Goldaxt",          cost: { gold: 3, stone: 2, stone_axe: 1 },    result: { gold_axe: 1 } },
-  diamond_axe:     { name: "Diamantaxt",       cost: { diamond: 3, gold: 2, gold_axe: 1 },   result: { diamond_axe: 1 } },
-  wood_pickaxe:    { name: "Holzspitzhacke",   cost: { wood: 3 },                            result: { wood_pickaxe: 1 } },
-  stone_pickaxe:   { name: "Steinspitzhacke",  cost: { wood: 2, stone: 4, wood_pickaxe: 1 }, result: { stone_pickaxe: 1 } },
-  gold_pickaxe:    { name: "Goldspitzhacke",   cost: { gold: 4, stone: 2, stone_pickaxe: 1 }, result: { gold_pickaxe: 1 } },
-  diamond_pickaxe: { name: "Diamantspitzhacke", cost: { diamond: 4, gold: 2, gold_pickaxe: 1 }, result: { diamond_pickaxe: 1 } },
-  spear:    { name: "Speer",      cost: { wood: 5, stone: 5 },  result: { spear: 1 } },
+  // Werkzeug-Kette (Idee von Kimi): eine höhere Stufe braucht immer das
+  // Werkzeug der Vorstufe als Zutat + das jeweils neue Material. So arbeitet
+  // man sich Stück für Stück hoch: Holz → Stein → Eisen → Gold → Diamant.
+
+  // --- Äxte (geben Holz) ---
+  wood_axe:    { name: "Holzaxt",    cost: { wood: 3 },                              result: { wood_axe: 1 } },
+  stone_axe:   { name: "Steinaxt",   cost: { wood: 2, stone: 3, wood_axe: 1 },       result: { stone_axe: 1 } },
+  iron_axe:    { name: "Eisenaxt",   cost: { iron_ore: 3, stone: 2, stone_axe: 1 },  result: { iron_axe: 1 } },
+  gold_axe:    { name: "Goldaxt",    cost: { gold_ore: 3, iron_ore: 2, iron_axe: 1 }, result: { gold_axe: 1 } },
+  diamond_axe: { name: "Diamantaxt", cost: { diamond: 3, gold_ore: 2, gold_axe: 1 }, result: { diamond_axe: 1 } },
+
+  // --- Spitzhacken (geben Stein, Erz, Gold, Diamant) ---
+  wood_pickaxe:    { name: "Holzspitzhacke",    cost: { wood: 3 },                                  result: { wood_pickaxe: 1 } },
+  stone_pickaxe:   { name: "Steinspitzhacke",   cost: { wood: 2, stone: 4, wood_pickaxe: 1 },       result: { stone_pickaxe: 1 } },
+  iron_pickaxe:    { name: "Eisenspitzhacke",   cost: { iron_ore: 4, stone: 2, stone_pickaxe: 1 },  result: { iron_pickaxe: 1 } },
+  gold_pickaxe:    { name: "Goldspitzhacke",    cost: { gold_ore: 4, iron_ore: 2, iron_pickaxe: 1 }, result: { gold_pickaxe: 1 } },
+  diamond_pickaxe: { name: "Diamantspitzhacke", cost: { diamond: 4, gold_ore: 2, gold_pickaxe: 1 }, result: { diamond_pickaxe: 1 } },
+
+  // --- Schwerter (Extra-Schaden gegen Tiere) ---
+  wood_sword:    { name: "Holzschwert",    cost: { wood: 3, stone: 2 },                       result: { wood_sword: 1 } },
+  stone_sword:   { name: "Steinschwert",   cost: { wood: 2, stone: 4, wood_sword: 1 },        result: { stone_sword: 1 } },
+  iron_sword:    { name: "Eisenschwert",   cost: { iron_ore: 4, wood: 2, stone_sword: 1 },    result: { iron_sword: 1 } },
+  gold_sword:    { name: "Goldschwert",    cost: { gold_ore: 4, wood: 2, iron_sword: 1 },     result: { gold_sword: 1 } },
+  diamond_sword: { name: "Diamantschwert", cost: { diamond: 4, wood: 2, gold_sword: 1 },      result: { diamond_sword: 1 } },
+
+  // --- Speere (noch mehr Schaden als das Schwert, aber teurer) ---
+  wood_spear:    { name: "Holzspeer",    cost: { wood: 5, stone: 2 },                       result: { wood_spear: 1 } },
+  stone_spear:   { name: "Steinspeer",   cost: { wood: 3, stone: 5, wood_spear: 1 },        result: { stone_spear: 1 } },
+  iron_spear:    { name: "Eisenspeer",   cost: { iron_ore: 5, wood: 3, stone_spear: 1 },    result: { iron_spear: 1 } },
+  gold_spear:    { name: "Goldspeer",    cost: { gold_ore: 5, wood: 3, iron_spear: 1 },     result: { gold_spear: 1 } },
+  diamond_spear: { name: "Diamantspeer", cost: { diamond: 5, wood: 3, gold_spear: 1 },      result: { diamond_spear: 1 } },
+
   campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
   backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
   // Kochen: braucht rohes Fleisch (von Tieren) UND Nähe zum Lagerfeuer
@@ -164,18 +220,32 @@ const RECIPES = {
   },
 };
 
-// ---------- TOOLS: Art und Stufe der Werkzeuge ----------
-// kind = Wofür das Werkzeug gedacht ist, tier = Stufe (1=Holz, 2=Stein,
-// 3=Gold, 4=Diamant). Höhere Stufe = mehr Ertrag pro Schlag (siehe tryHit).
+// ---------- TOOLS: Art und Stufe der Werkzeuge (Idee von Kimi) ----------
+// kind  = wofür das Werkzeug gut ist (axe/pickaxe/sword/spear),
+// tier  = Stufe (1=Holz, 2=Stein, 3=Eisen, 4=Gold, 5=Diamant).
+// Höhere Stufe = mehr Ertrag bzw. Schaden pro Schlag (Formel in tryHit).
+// So muss tryHit nicht mehr jedes einzelne Werkzeug per Namen abfragen.
 const TOOLS = {
   wood_axe:        { kind: "axe",     tier: 1 },
   stone_axe:       { kind: "axe",     tier: 2 },
-  gold_axe:        { kind: "axe",     tier: 3 },
-  diamond_axe:     { kind: "axe",     tier: 4 },
+  iron_axe:        { kind: "axe",     tier: 3 },
+  gold_axe:        { kind: "axe",     tier: 4 },
+  diamond_axe:     { kind: "axe",     tier: 5 },
   wood_pickaxe:    { kind: "pickaxe", tier: 1 },
   stone_pickaxe:   { kind: "pickaxe", tier: 2 },
-  gold_pickaxe:    { kind: "pickaxe", tier: 3 },
-  diamond_pickaxe: { kind: "pickaxe", tier: 4 },
+  iron_pickaxe:    { kind: "pickaxe", tier: 3 },
+  gold_pickaxe:    { kind: "pickaxe", tier: 4 },
+  diamond_pickaxe: { kind: "pickaxe", tier: 5 },
+  wood_sword:      { kind: "sword",   tier: 1 },
+  stone_sword:     { kind: "sword",   tier: 2 },
+  iron_sword:      { kind: "sword",   tier: 3 },
+  gold_sword:      { kind: "sword",   tier: 4 },
+  diamond_sword:   { kind: "sword",   tier: 5 },
+  wood_spear:      { kind: "spear",   tier: 1 },
+  stone_spear:     { kind: "spear",   tier: 2 },
+  iron_spear:      { kind: "spear",   tier: 3 },
+  gold_spear:      { kind: "spear",   tier: 4 },
+  diamond_spear:   { kind: "spear",   tier: 5 },
 };
 
 // ---------- Tier-Arten (von Kimi) ----------
@@ -216,6 +286,13 @@ const FILES = {
   "/index.html": ["index.html", "text/html"],
   "/style.css": ["style.css", "text/css"],
   "/js/game.js": ["js/game.js", "text/javascript"],
+  "/assets/rabbit.png": ["assets/rabbit.png", "image/png"],
+  "/assets/wolf.png": ["assets/wolf.png", "image/png"],
+  "/assets/spider.png": ["assets/spider.png", "image/png"],
+  "/assets/tool-axe.png": ["assets/tool-axe.png", "image/png"],
+  "/assets/tool-pickaxe.png": ["assets/tool-pickaxe.png", "image/png"],
+  "/assets/tool-sword.png": ["assets/tool-sword.png", "image/png"],
+  "/assets/tool-spear.png": ["assets/tool-spear.png", "image/png"],
 };
 
 const server = http.createServer((req, res) => {
@@ -232,7 +309,8 @@ const server = http.createServer((req, res) => {
       res.end("500 — Datei konnte nicht gelesen werden");
       return;
     }
-    res.writeHead(200, { "Content-Type": contentType + "; charset=utf-8" });
+    const isText = contentType.startsWith("text/") || contentType.includes("javascript");
+    res.writeHead(200, { "Content-Type": isText ? contentType + "; charset=utf-8" : contentType });
     res.end(data);
   });
 });
@@ -246,10 +324,50 @@ const server = http.createServer((req, res) => {
 // Die Farbe schickt der Server beim Beitritt an die Browser zum Zeichnen.
 const half = CONFIG.worldSize / 2;
 const BIOMES = [
-  { name: "snow",   color: "#dfe9f2", x: 0,    y: 0,    w: CONFIG.worldSize, h: half },
-  { name: "forest", color: "#4caf50", x: 0,    y: half, w: half, h: half },
-  { name: "ocean",  color: "#1b6ca8", x: half, y: half, w: half, h: half },
+  { name: "snow",   color: "#eef4fa", x: 0,    y: 0,    w: CONFIG.worldSize, h: half },
+  { name: "forest", color: "#5fae2d", x: 0,    y: half, w: half, h: half },
+  { name: "ocean",  color: "#2196d8", x: half, y: half, w: half, h: half },
 ];
+
+// Flüsse: begehbare, aber langsamere Wasser-Streifen im Wald-Biom.
+// Jeder Fluss ist eine geknickte Linie (Liste von Punkten) mit einer
+// Breite — er läuft vom Schnee-Rand (oben) bis zum Ozean-Rand (rechts),
+// als würde er aus den Bergen ins Meer fließen.
+const RIVERS = [
+  {
+    width: CONFIG.riverWidth,
+    points: [
+      { x: half * 0.28, y: half },
+      { x: half * 0.42, y: half + half * 0.22 },
+      { x: half * 0.30, y: half + half * 0.45 },
+      { x: half * 0.50, y: half + half * 0.68 },
+      { x: half * 0.62, y: half + half * 0.82 },
+      { x: half,        y: half + half * 0.88 },
+    ],
+  },
+];
+
+// Kürzester Abstand von Punkt (x,y) zu einer Strecke (ax,ay)-(bx,by)
+function distToSegment(x, y, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq > 0 ? ((x - ax) * dx + (y - ay) * dy) / lenSq : 0;
+  t = clamp(t, 0, 1);
+  const px = ax + t * dx, py = ay + t * dy;
+  return dist(x, y, px, py);
+}
+
+// Liegt (x,y) innerhalb eines Flusses? (für Bewegungs-Geschwindigkeit)
+function inRiver(x, y) {
+  for (const river of RIVERS) {
+    const pts = river.points;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const d = distToSegment(x, y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+      if (d < river.width / 2) return true;
+    }
+  }
+  return false;
+}
 
 // In welchem Biom liegt der Punkt (x, y)?
 function biomeAt(x, y) {
@@ -301,14 +419,21 @@ function createWorld() {
     resources.push({ type: "rock", x: pos.x, y: pos.y, radius: rand(26, 38) });
   }
 
-  // Goldadern (Wald + Schnee)
-  for (let i = 0; i < CONFIG.forestGold + CONFIG.snowGold; i++) {
-    const biome = i < CONFIG.forestGold ? forest : snow;
+  // Eisenerz (viel im Wald, wenig im Schnee)
+  for (let i = 0; i < CONFIG.forestIronOre + CONFIG.snowIronOre; i++) {
+    const biome = i < CONFIG.forestIronOre ? forest : snow;
     const pos = randInBiome(biome, 60);
-    resources.push({ type: "gold", x: pos.x, y: pos.y, radius: rand(24, 34) });
+    resources.push({ type: "iron_ore", x: pos.x, y: pos.y, radius: rand(24, 34) });
   }
 
-  // Diamanten (nur Schnee)
+  // Golderz (viel im Schnee, wenig im Wald)
+  for (let i = 0; i < CONFIG.snowGoldOre + CONFIG.forestGoldOre; i++) {
+    const biome = i < CONFIG.snowGoldOre ? snow : forest;
+    const pos = randInBiome(biome, 60);
+    resources.push({ type: "gold_ore", x: pos.x, y: pos.y, radius: rand(24, 34) });
+  }
+
+  // Diamanten (von Kimi): nur im Schnee, die seltenste und wertvollste Ressource
   for (let i = 0; i < CONFIG.snowDiamond; i++) {
     const pos = randInBiome(snow, 60);
     resources.push({ type: "diamond", x: pos.x, y: pos.y, radius: rand(20, 28) });
@@ -418,7 +543,7 @@ function addPlayer(id, name) {
     health: CONFIG.maxHealth,
     hunger: CONFIG.maxHunger,
     cold: 0,            // Wie sehr der Spieler friert (0 = warm, 100 = erfriert)
-    inventory: {},      // Item-Sorte (id) -> Anzahl, z.B. { wood: 3, wood_axe: 1 }
+    inventory: {},      // Item-Sorte (id) -> Anzahl, z.B. { wood: 3, axe: 1 }
     equipped: null,     // Welches Werkzeug gerade in der Hand ist (id oder null)
     hitTimer: 0,        // Zeit bis zum nächsten möglichen Schlag
     dead: false,
@@ -528,7 +653,8 @@ function craft(player, recipeId) {
   if (recipe.requiresNear === "campfire" && !nearCampfire(player.x, player.y)) return;
 
   takeItems(player, recipe.cost);
-  // Das verbrauchte Werkzeug der Vorstufe wird auch aus der Hand gelegt
+  // Das verbrauchte Werkzeug der Vorstufe (z.B. Holzaxt beim Bau der Steinaxt)
+  // aus der Hand legen, falls es gerade ausgerüstet und nun aufgebraucht ist.
   if (player.equipped && countItem(player, player.equipped) <= 0) {
     player.equipped = null;
   }
@@ -592,13 +718,18 @@ function update(dt) {
       dy *= 0.7071;
     }
 
+    // Im Fluss ist man langsamer unterwegs (wie in flachem Wasser waten)
+    const speed = inRiver(player.x, player.y)
+      ? CONFIG.playerSpeed * CONFIG.riverSpeedMultiplier
+      : CONFIG.playerSpeed;
+
     // Bewegen — aber der Ozean darf nicht betreten werden.
     // Die beiden Richtungen werden einzeln geprüft, damit der Spieler
     // am Ufer entlang „rutscht" statt komplett stehen zu bleiben.
-    const nextX = player.x + dx * CONFIG.playerSpeed * dt;
+    const nextX = player.x + dx * speed * dt;
     if (biomeAt(nextX, player.y).name !== "ocean") player.x = nextX;
 
-    const nextY = player.y + dy * CONFIG.playerSpeed * dt;
+    const nextY = player.y + dy * speed * dt;
     if (biomeAt(player.x, nextY).name !== "ocean") player.y = nextY;
 
     // Nicht aus der Welt herauslaufen
@@ -807,12 +938,19 @@ function tryHit(player) {
     }
   }
 
+  // Art + Stufe des ausgerüsteten Werkzeugs (tier 0 = bloße Hand).
+  // Aus der TOOLS-Tabelle statt vieler Namensabfragen (Kimis Idee).
+  const tool = player.equipped ? TOOLS[player.equipped] : null;
+  const toolKind = tool ? tool.kind : null;
+  const toolTier = tool ? tool.tier : 0;
+
   // Ein Tier getroffen: es verliert Leben und lässt rohes Fleisch fallen.
-  // Mit ausgerüstetem Speer richtet der Schlag mehr Schaden an.
+  // Schwert und Speer geben Extra-Schaden (Speer mehr), je höher die Stufe.
   if (closestAnimal) {
     const type = ANIMAL_TYPES[closestAnimal.species];
     let damage = CONFIG.playerDamage;
-    if (player.equipped === "spear") damage += CONFIG.spearDamageBonus;
+    if (toolKind === "sword") damage += toolTier * CONFIG.swordDamageBonus;
+    else if (toolKind === "spear") damage += toolTier * CONFIG.spearDamageBonus;
     closestAnimal.health -= damage;
     if (closestAnimal.health <= 0) {
       closestAnimal.dead = true;
@@ -824,27 +962,19 @@ function tryHit(player) {
 
   if (!closest) return;
 
-  // Stufe des ausgerüsteten Werkzeugs (0 = keins/nicht passend)
-  const equippedTool = player.equipped ? TOOLS[player.equipped] : null;
-  const axeTier = equippedTool && equippedTool.kind === "axe" ? equippedTool.tier : 0;
-  const pickTier = equippedTool && equippedTool.kind === "pickaxe" ? equippedTool.tier : 0;
-
   if (closest.type === "tree") {
-    // Jede Axt-Stufe bringt mehr Holz
-    const amount = CONFIG.woodPerHit + axeTier * CONFIG.axeWoodBonus;
+    // Axt: je Stufe mehr Holz
+    const amount = CONFIG.woodPerHit + (toolKind === "axe" ? toolTier * CONFIG.axeWoodBonus : 0);
     giveItem(player, "wood", amount);
   } else if (closest.type === "rock") {
-    // Jede Spitzhacken-Stufe bringt mehr Stein
-    const amount = CONFIG.stonePerHit + pickTier * CONFIG.pickaxeStoneBonus;
+    // Spitzhacke: je Stufe mehr Stein
+    const amount = CONFIG.stonePerHit + (toolKind === "pickaxe" ? toolTier * CONFIG.pickaxeStoneBonus : 0);
     giveItem(player, "stone", amount);
-  } else if (closest.type === "gold") {
-    // Goldadern: wie Steine, nur mit dem Gold-Bonus
-    const amount = CONFIG.goldPerHit + pickTier * CONFIG.pickaxeGoldBonus;
-    giveItem(player, "gold", amount);
-  } else if (closest.type === "diamond") {
-    // Diamanten: wie Steine, nur mit dem Diamant-Bonus
-    const amount = CONFIG.diamondPerHit + pickTier * CONFIG.pickaxeDiamondBonus;
-    giveItem(player, "diamond", amount);
+  } else if (closest.type === "iron_ore" || closest.type === "gold_ore" || closest.type === "diamond") {
+    // Erz, Gold und Diamant: je Spitzhacken-Stufe mehr. Das Item heißt genau
+    // wie der Ressourcen-Typ (iron_ore / gold_ore / diamond).
+    const amount = CONFIG.orePerHit + (toolKind === "pickaxe" ? toolTier * CONFIG.pickaxeOreBonus : 0);
+    giveItem(player, closest.type, amount);
   } else if (closest.type === "bush" && closest.berries > 0) {
     const added = giveItem(player, "berry", 1);
     if (added > 0) {
@@ -862,8 +992,8 @@ function tryHit(player) {
 //   { t: "input", up, down, left, right, angle }   Tasten + Blickrichtung
 //   { t: "hit" }                            Schlagen
 //   { t: "eat", item: "berry" (optional) }  Essen (bestimmtes oder bestes)
-//   { t: "craft", recipe: "wood_axe" }        Ein Rezept bauen
-//   { t: "equip", tool: "wood_axe"|null }      Werkzeug ausrüsten / weglegen
+//   { t: "craft", recipe: "axe" }           Ein Rezept bauen
+//   { t: "equip", tool: "axe"|null }         Werkzeug ausrüsten / weglegen
 //   { t: "place", item: "campfire" }        Etwas platzieren (Lagerfeuer)
 //   { t: "respawn" }                        Nach dem Tod neu starten
 //
@@ -991,6 +1121,7 @@ wss.on("connection", (ws) => {
           maxHunger: CONFIG.maxHunger,
           capacity: CONFIG.capacity,
           biomes: BIOMES,   // Biom-Rechtecke inkl. Farbe (zum Zeichnen + Minimap)
+          rivers: RIVERS,   // Fluss-Linien inkl. Breite (zum Zeichnen)
         },
         items: ITEMS,        // Katalog: Namen + Icons aller Items
         recipes: RECIPES,    // Alle Crafting-Rezepte für das Menü

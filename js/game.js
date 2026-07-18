@@ -29,6 +29,7 @@ const CONFIG = {
   maxHunger: 100,
   capacity: 20,
   biomes: [],   // Biom-Rechtecke inkl. Farbe — kommen beim Beitritt vom Server
+  rivers: [],   // Fluss-Linien inkl. Breite — kommen beim Beitritt vom Server
 };
 
 // Kataloge vom Server (kommen beim Beitritt in der "welcome"-Nachricht):
@@ -39,6 +40,43 @@ let RECIPES = {};
 // ---------- 2. HILFSFUNKTIONEN ----------
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+
+// Tier-Sprites (ersetzen die früher per Code gezeichneten Formen)
+const ANIMAL_SPRITES = {
+  rabbit: "assets/rabbit.png",
+  wolf: "assets/wolf.png",
+  spider: "assets/spider.png",
+};
+const animalImages = {};
+for (const [species, src] of Object.entries(ANIMAL_SPRITES)) {
+  const img = new Image();
+  img.src = src;
+  animalImages[species] = img;
+}
+
+// Item-Icon-Bilder (Werkzeuge mit eigenem Sprite statt Emoji).
+// Werden erst bei Bedarf geladen, da ITEMS erst mit "welcome" vom Server kommt.
+const itemImages = {};
+function getItemImage(id) {
+  const item = ITEMS[id];
+  if (!item || !item.image) return null;
+  if (!itemImages[id]) {
+    const img = new Image();
+    img.src = item.image;
+    itemImages[id] = img;
+  }
+  return itemImages[id];
+}
+
+// HTML-Schnipsel für ein Item-Icon: Bild, wenn vorhanden, sonst Emoji.
+function itemIconHtml(id) {
+  const item = ITEMS[id];
+  if (!item) return "";
+  if (item.image) {
+    return '<img class="icon-img" src="' + item.image + '" alt="">';
+  }
+  return item.icon;
+}
 
 function resizeCanvas() {
   canvas.width = window.innerWidth;
@@ -420,13 +458,14 @@ function updateInventory(me) {
 
     if (id) {
       const item = ITEMS[id];
-      html += '<span class="icon">' + item.icon + "</span><span>" + inv[id] + "</span>";
+      slot.title = item.name;
+      html += '<span class="icon">' + itemIconHtml(id) + "</span><span>" + inv[id] + "</span>";
 
       // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
       if (item.tool) {
         slot.classList.add("tool");
         if (me.equipped === id) slot.classList.add("equipped");
-        slot.title = item.name + " — Klicken zum Ausrüsten";
+        slot.title = item.name + " – Klicken zum Ausrüsten";
         slot.addEventListener("click", () => {
           sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
         });
@@ -463,13 +502,15 @@ function buildRecipeMenu() {
     const recipe = RECIPES[id];
     const row = document.createElement("div");
     row.className = "recipe";
+    row.dataset.recipe = id;
 
-    // Kopf: Icon + Name des Ergebnisses
+    // Kopf: nur noch das Icon des Ergebnisses (Name als Tooltip beim Hover)
     const resultId = Object.keys(recipe.result)[0];
-    const icon = ITEMS[resultId] ? ITEMS[resultId].icon : "";
+    const icon = ITEMS[resultId] ? itemIconHtml(resultId) : "";
+    row.title = recipe.name;
     const head = document.createElement("div");
     head.className = "recipe-head";
-    head.innerHTML = "<span>" + icon + "</span><span>" + recipe.name + "</span>";
+    head.innerHTML = "<span>" + icon + "</span>";
     row.appendChild(head);
 
     // Kosten-Zeile (wird von refreshRecipeMenu gefüllt)
@@ -482,16 +523,16 @@ function buildRecipeMenu() {
     if (recipe.requiresNear === "campfire") {
       const hint = document.createElement("div");
       hint.className = "recipe-hint";
-      hint.textContent = "🔥 nur am Lagerfeuer";
+      hint.textContent = "🔥";
+      hint.title = "nur am Lagerfeuer";
       row.appendChild(hint);
     }
 
-    // Bauen-Knopf
-    const btn = document.createElement("button");
-    btn.textContent = "Bauen";
-    btn.dataset.recipe = id;
-    btn.addEventListener("click", () => sendMessage({ t: "craft", recipe: id }));
-    row.appendChild(btn);
+    // Die ganze Zeile ist der "Bauen"-Knopf: einfach draufklicken
+    row.addEventListener("click", () => {
+      if (row.classList.contains("disabled")) return;
+      sendMessage({ t: "craft", recipe: id });
+    });
 
     list.appendChild(row);
   }
@@ -504,8 +545,8 @@ function refreshRecipeMenu(me) {
   for (const id in RECIPES) {
     const recipe = RECIPES[id];
     const costEl = document.querySelector('.recipe-cost[data-recipe="' + id + '"]');
-    const btn = document.querySelector('.recipe button[data-recipe="' + id + '"]');
-    if (!costEl || !btn) continue;
+    const row = document.querySelector('.recipe[data-recipe="' + id + '"]');
+    if (!costEl || !row) continue;
 
     let affordable = true;
     const parts = [];
@@ -513,12 +554,12 @@ function refreshRecipeMenu(me) {
       const have = inv[need] || 0;
       const enough = have >= recipe.cost[need];
       if (!enough) affordable = false;
-      const itemIcon = ITEMS[need] ? ITEMS[need].icon : need;
+      const itemIcon = ITEMS[need] ? itemIconHtml(need) : need;
       const cls = enough ? "" : ' class="cost-missing"';
       parts.push("<span" + cls + ">" + itemIcon + " " + have + "/" + recipe.cost[need] + "</span>");
     }
     costEl.innerHTML = parts.join(" &nbsp; ");
-    btn.disabled = !affordable;
+    row.classList.toggle("disabled", !affordable);
   }
 }
 
@@ -548,6 +589,7 @@ function render() {
   ctx.translate(-camera.x, -camera.y);
 
   drawGrid();
+  drawRivers();
   drawWorldBorder();
 
   // Ressourcen, Lagerfeuer, Tiere und Spieler nach Y-Position sortieren,
@@ -579,33 +621,107 @@ function render() {
   drawMinimap();
 }
 
-// Leichtes Gitter, damit man die Bewegung sieht
+// Einfacher Pseudo-Zufall aus zwei Zahlen (immer dasselbe Ergebnis für
+// dieselbe Zelle -> der Boden "flackert" nicht beim Bewegen)
+function cellRandom(cx, cy) {
+  const s = Math.sin(cx * 127.1 + cy * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+// Boden-Textur im Starve.io-Stil: statt eines schlichten Gitters kleine
+// Gras-Büschel und dunklere Farbtupfer, die zum jeweiligen Biom passen.
 function drawGrid() {
-  const gridSize = 100;
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.06)";
-  ctx.lineWidth = 2;
+  const cellSize = 90;
+  const startX = Math.floor(camera.x / cellSize) * cellSize;
+  const startY = Math.floor(camera.y / cellSize) * cellSize;
 
-  const startX = Math.floor(camera.x / gridSize) * gridSize;
-  const startY = Math.floor(camera.y / gridSize) * gridSize;
+  for (let x = startX; x <= camera.x + canvas.width + cellSize; x += cellSize) {
+    for (let y = startY; y <= camera.y + canvas.height + cellSize; y += cellSize) {
+      const cx = Math.floor(x / cellSize);
+      const cy = Math.floor(y / cellSize);
+      const r1 = cellRandom(cx, cy);
+      const r2 = cellRandom(cx + 91, cy + 17);
+      const r3 = cellRandom(cx - 53, cy + 29);
 
-  for (let x = startX; x <= camera.x + canvas.width; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, camera.y);
-    ctx.lineTo(x, camera.y + canvas.height);
-    ctx.stroke();
+      // Welches Biom ist an dieser Stelle? (bestimmt Farbe der Tupfer)
+      let dark = "rgba(0, 0, 0, 0.08)";
+      for (const b of CONFIG.biomes) {
+        if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) {
+          dark = b.color;
+          break;
+        }
+      }
+
+      const px = x + r1 * cellSize;
+      const py = y + r2 * cellSize;
+
+      // Kleiner dunklerer Fleck als Bodenschattierung
+      ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+      ctx.beginPath();
+      ctx.ellipse(px, py, 14, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Gras-Büschel: drei kleine dunkelgrüne Striche, wie bei Starve.io
+      if (r3 > 0.35) {
+        const gx = x + r3 * cellSize;
+        const gy = y + cellRandom(cx + 5, cy - 5) * cellSize;
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.22)";
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(gx + i * 5, gy + 6);
+          ctx.lineTo(gx + i * 5 + i * 2, gy - 6);
+          ctx.stroke();
+        }
+      }
+    }
   }
-  for (let y = startY; y <= camera.y + canvas.height; y += gridSize) {
+}
+
+// Flüsse zeichnen: breite blaue Linie mit dunklerem Rand (wie Ufer) und
+// ein paar hellen "Glitzer"-Strichen, die sich langsam bewegen.
+function drawRivers() {
+  if (!CONFIG.rivers) return;
+  const shimmerOffset = (performance.now() / 400) % 40;
+
+  for (const river of CONFIG.rivers) {
+    const pts = river.points;
+    if (!pts || pts.length < 2) continue;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // Ufer (dunkler, etwas breiter als das Wasser selbst)
+    ctx.strokeStyle = "#1565a8";
+    ctx.lineWidth = river.width + 10;
     ctx.beginPath();
-    ctx.moveTo(camera.x, y);
-    ctx.lineTo(camera.x + canvas.width, y);
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.stroke();
+
+    // Wasserfläche
+    ctx.strokeStyle = "#2ba0e0";
+    ctx.lineWidth = river.width;
+    ctx.stroke();
+
+    // Glitzer-Streifen: helle gestrichelte Linie, die leicht "fließt"
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.lineWidth = river.width * 0.18;
+    ctx.setLineDash([18, 22]);
+    ctx.lineDashOffset = -shimmerOffset;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.restore();
   }
 }
 
 // Dunkler Rand am Ende der Welt
 function drawWorldBorder() {
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
-  ctx.lineWidth = 10;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
+  ctx.lineWidth = 14;
   ctx.strokeRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
 }
 
@@ -617,58 +733,123 @@ function drawResource(res) {
 
   if (res.type === "tree") {
     // Stamm
-    ctx.fillStyle = "#6d4c2f";
+    ctx.fillStyle = "#7a5230";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(x, y, res.radius * 0.35, 0, Math.PI * 2);
     ctx.fill();
-    // Baumkrone
-    ctx.fillStyle = "#2e7d32";
-    ctx.strokeStyle = "#1b5e20";
-    ctx.lineWidth = 4;
+    ctx.stroke();
+    // Baumkrone: kräftiges Grün mit dicker schwarzer Kontur (Starve.io-Look)
+    ctx.fillStyle = "#43a047";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    // Glanzlicht oben links, macht die Krone plastischer
+    ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.32, y - res.radius * 0.35, res.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
   } else if (res.type === "rock") {
-    ctx.fillStyle = "#9e9e9e";
-    ctx.strokeStyle = "#616161";
-    ctx.lineWidth = 4;
+    ctx.fillStyle = "#bdbdbd";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     // Kleine Details auf dem Stein
-    ctx.fillStyle = "#757575";
+    ctx.fillStyle = "#8d8d8d";
     ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
+    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.22, 0, Math.PI * 2);
     ctx.fill();
-  } else if (res.type === "gold") {
-    // Goldader: wie der Stein, nur golden
-    ctx.fillStyle = "#f2b705";
-    ctx.strokeStyle = "#a67c00";
+    // Glanzlicht
+    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (res.type === "bush") {
+    // Strauch
+    ctx.fillStyle = "#4caf50";
+    ctx.strokeStyle = "#000";
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // Kleine helle Einschlüsse in der Ader
-    ctx.fillStyle = "#ffe082";
+    // Beeren: kräftiges Rot mit schwarzer Kontur
+    for (let i = 0; i < res.berries; i++) {
+      const angle = (i / 4) * Math.PI * 2 + 0.5;
+      const bx = x + Math.cos(angle) * res.radius * 0.5;
+      const by = y + Math.sin(angle) * res.radius * 0.5;
+      ctx.fillStyle = "#e53935";
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(bx, by, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else if (res.type === "iron_ore") {
+    // Gestein mit rostig-braunen Eisenadern
+    ctx.fillStyle = "#8d8d8d";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
+    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#b5651d";
+    for (let i = 0; i < 3; i++) {
+      const angle = (i / 3) * Math.PI * 2 + 0.4;
+      const ox = x + Math.cos(angle) * res.radius * 0.45;
+      const oy = y + Math.sin(angle) * res.radius * 0.45;
+      ctx.beginPath();
+      ctx.arc(ox, oy, res.radius * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
     ctx.beginPath();
-    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.12, 0, Math.PI * 2);
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (res.type === "gold_ore") {
+    // Gestein mit glänzenden Gold-Nuggets
+    ctx.fillStyle = "#9e9e9e";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffd700";
+    ctx.strokeStyle = "#c9a600";
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 3; i++) {
+      const angle = (i / 3) * Math.PI * 2 + 0.4;
+      const ox = x + Math.cos(angle) * res.radius * 0.45;
+      const oy = y + Math.sin(angle) * res.radius * 0.45;
+      ctx.beginPath();
+      ctx.arc(ox, oy, res.radius * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
     ctx.fill();
   } else if (res.type === "diamond") {
-    // Diamant-Kristall: wie der Stein, nur eisblau
+    // Diamant-Kristall (von Kimi): eisblaues Gestein mit heller Raute
     ctx.fillStyle = "#4dd0e1";
-    ctx.strokeStyle = "#00838f";
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // Kleine helle Einschlüsse im Kristall
+    // Helle Einschlüsse im Kristall
     ctx.fillStyle = "#b2ebf2";
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
@@ -677,33 +858,23 @@ function drawResource(res) {
     ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.12, 0, Math.PI * 2);
     ctx.fill();
     // Helle Raute in der Mitte als Erkennungszeichen
-    const r = res.radius * 0.35;
+    const dr = res.radius * 0.4;
+    ctx.fillStyle = "#e0f7fa";
+    ctx.strokeStyle = "#00838f";
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(x, y - r);
-    ctx.lineTo(x + r, y);
-    ctx.lineTo(x, y + r);
-    ctx.lineTo(x - r, y);
+    ctx.moveTo(x, y - dr);
+    ctx.lineTo(x + dr, y);
+    ctx.lineTo(x, y + dr);
+    ctx.lineTo(x - dr, y);
     ctx.closePath();
     ctx.fill();
-  } else if (res.type === "bush") {
-    // Strauch
-    ctx.fillStyle = "#388e3c";
-    ctx.strokeStyle = "#1b5e20";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
-    ctx.fill();
     ctx.stroke();
-    // Beeren als kleine rote Punkte
-    for (let i = 0; i < res.berries; i++) {
-      const angle = (i / 4) * Math.PI * 2 + 0.5;
-      const bx = x + Math.cos(angle) * res.radius * 0.5;
-      const by = y + Math.sin(angle) * res.radius * 0.5;
-      ctx.fillStyle = "#e53935";
-      ctx.beginPath();
-      ctx.arc(bx, by, 5, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    // Glanzlicht
+    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.2, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -713,10 +884,13 @@ function drawStructure(s) {
   const x = s.x, y = s.y;
 
   // Steinring
-  ctx.fillStyle = "#6d6d6d";
+  ctx.fillStyle = "#8d8d8d";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(x, y, 20, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
 
   // Holzscheite (zwei gekreuzte Balken)
   ctx.strokeStyle = "#5d4037";
@@ -746,75 +920,44 @@ function drawStructure(s) {
 }
 
 // Ein Tier zeichnen (Hase, Spinne, Wolf, Eisbär).
-// Alle Tiere schauen in ihre Laufrichtung (angle), wie die Spieler.
+// Die Sprite-Tiere (Hase, Spinne, Wolf) bleiben aufrecht und spiegeln sich
+// nur nach links/rechts, je nachdem wohin sie gerade laufen — eine volle
+// Drehung würde bei diesen frontal gezeichneten Icons komisch aussehen.
+// Der Eisbär wird weiterhin klassisch gezeichnet und dreht sich komplett.
 function drawAnimal(a) {
   // Wackel-Effekt beim Treffer (wie bei den Ressourcen)
   const shakeX = a.shake > 0 ? Math.sin(a.shake * 30) * 4 : 0;
 
   ctx.save();
   ctx.translate(a.x + shakeX, a.y);
-  ctx.rotate(a.angle || 0);
   ctx.lineWidth = 3;
 
   const r = a.radius;
 
-  if (a.species === "rabbit") {
-    // Ohren (hinten, oben und unten)
-    ctx.fillStyle = "#d7b98a";
-    ctx.strokeStyle = "#8d6e42";
-    ctx.beginPath();
-    ctx.arc(-r * 0.7, -r * 0.6, r * 0.35, 0, Math.PI * 2);
-    ctx.arc(-r * 0.7, r * 0.6, r * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Körper
-    ctx.fillStyle = "#c8a165";
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  } else if (a.species === "spider") {
-    // Beine (Striche nach allen Seiten)
-    ctx.strokeStyle = "#3e2723";
-    for (let i = 0; i < 8; i++) {
-      const legAngle = (i / 8) * Math.PI * 2;
+  if (a.species === "rabbit" || a.species === "spider" || a.species === "wolf") {
+    // Nach links oder rechts spiegeln, je nach Laufrichtung (kein Kippen)
+    const facingLeft = Math.cos(a.angle || 0) < 0;
+    if (facingLeft) ctx.scale(-1, 1);
+
+    // Sprite-Bild verwenden (ersetzt die frühere Vektor-Zeichnung)
+    const img = animalImages[a.species];
+    // Jede Art hat ihre eigene Größe (Vielfaches des Kollisionsradius)
+    const SPRITE_SCALE = { rabbit: 8.5, wolf: 13, spider: 26 };
+    const size = r * (SPRITE_SCALE[a.species] || 6.5);
+    if (img && img.complete && img.naturalWidth > 0) {
+      const aspect = img.naturalWidth / img.naturalHeight;
+      const h = size;
+      const w = size * aspect;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    } else {
+      // Fallback, solange das Bild noch lädt: einfacher Kreis
+      ctx.fillStyle = "#999";
       ctx.beginPath();
-      ctx.moveTo(Math.cos(legAngle) * r * 0.5, Math.sin(legAngle) * r * 0.5);
-      ctx.lineTo(Math.cos(legAngle) * r * 1.7, Math.sin(legAngle) * r * 1.7);
-      ctx.stroke();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
     }
-    // Körper
-    ctx.fillStyle = "#4e342e";
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    // Rote Augen (vorne)
-    ctx.fillStyle = "#e53935";
-    ctx.beginPath();
-    ctx.arc(r * 0.5, -r * 0.3, 3, 0, Math.PI * 2);
-    ctx.arc(r * 0.5, r * 0.3, 3, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (a.species === "wolf") {
-    // Ohren (hinten)
-    ctx.fillStyle = "#78909c";
-    ctx.strokeStyle = "#455a64";
-    ctx.beginPath();
-    ctx.arc(-r * 0.4, -r * 0.8, r * 0.3, 0, Math.PI * 2);
-    ctx.arc(-r * 0.4, r * 0.8, r * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Körper
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Schnauze (vorne)
-    ctx.fillStyle = "#b0bec5";
-    ctx.beginPath();
-    ctx.arc(r * 0.85, 0, r * 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
   } else if (a.species === "bear") {
+    ctx.rotate(a.angle || 0);
     // Ohren (hinten)
     ctx.fillStyle = "#eceff1";
     ctx.strokeStyle = "#90a4ae";
@@ -853,9 +996,9 @@ function drawPlayer(p) {
   ctx.translate(p.x, p.y);
   ctx.rotate(p.angle || 0);
 
-  // Hände (zwei kleine Kreise vorne)
+  // Hände (zwei kleine Kreise vorne) — dicke schwarze Kontur wie bei Starve.io
   ctx.fillStyle = "#e0ac69";
-  ctx.strokeStyle = "#8d6e42";
+  ctx.strokeStyle = "#000";
   ctx.lineWidth = 3;
 
   // Rechte Hand (schlägt)
@@ -871,19 +1014,39 @@ function drawPlayer(p) {
 
   // Körper
   ctx.fillStyle = "#e0ac69";
-  ctx.strokeStyle = "#8d6e42";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
+  // Glanzlicht oben links, macht die Figur "plastischer"
+  ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+  ctx.beginPath();
+  ctx.arc(-r * 0.3, -r * 0.35, r * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Einfaches Gesicht: zwei schwarze Punktaugen, die immer nach vorne schauen
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(r * 0.35, -r * 0.32, r * 0.11, 0, Math.PI * 2);
+  ctx.arc(r * 0.35, r * 0.32, r * 0.11, 0, Math.PI * 2);
+  ctx.fill();
+
   // Ausgerüstetes Werkzeug in der rechten Hand zeigen
   if (p.equipped && ITEMS[p.equipped]) {
-    ctx.font = "20px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(ITEMS[p.equipped].icon, r * 0.95 + punch, r * 0.6);
+    const toolImg = getItemImage(p.equipped);
+    if (toolImg && toolImg.complete && toolImg.naturalWidth > 0) {
+      const th = r * 4.25; // 2.5x größer als vorher
+      const tw = th * (toolImg.naturalWidth / toolImg.naturalHeight);
+      ctx.drawImage(toolImg, r * 0.95 + punch - tw / 2, r * 0.6 - th / 2, tw, th);
+    } else {
+      ctx.font = "20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(ITEMS[p.equipped].icon, r * 0.95 + punch, r * 0.6);
+    }
   }
 
   ctx.restore();
@@ -941,6 +1104,25 @@ function drawMinimap() {
   } else {
     ctx.fillStyle = "#3d8b3d";
     ctx.fillRect(x0, y0, size, size);
+  }
+
+  // Flüsse als dünne blaue Linien
+  if (CONFIG.rivers) {
+    ctx.strokeStyle = "#2ba0e0";
+    ctx.lineCap = "round";
+    for (const river of CONFIG.rivers) {
+      const pts = river.points;
+      if (!pts || pts.length < 2) continue;
+      ctx.lineWidth = Math.max(1.5, river.width * scale);
+      ctx.beginPath();
+      const p0 = worldToMinimap(pts[0].x, pts[0].y, x0, y0, scale);
+      ctx.moveTo(p0.x, p0.y);
+      for (let i = 1; i < pts.length; i++) {
+        const p = worldToMinimap(pts[i].x, pts[i].y, x0, y0, scale);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
   }
 
   // Tiere als kleine rötliche Punkte (grobe Gefahren-/Beute-Übersicht)
