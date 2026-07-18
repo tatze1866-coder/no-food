@@ -17,24 +17,48 @@ WebSockets). Der Browser-Code läuft weiterhin direkt als klassisches
 
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
 
-An diesem Projekt arbeiten **mehrere verschiedene KI-Assistenten** (z.B. Claude
-und Kimi), gesteuert von zwei Personen ohne Programmiererfahrung. Damit sich die
-Änderungen nicht gegenseitig überschreiben, gilt für **jeden** Agenten:
+An diesem Projekt arbeiten **mehrere verschiedene KI-Assistenten** (Claude und
+Kimi) **parallel und gleichzeitig**, lokal auf demselben Rechner, gesteuert von
+Personen ohne Programmiererfahrung.
 
-1. **Am Anfang jeder Sitzung `git pull`** ausführen — immer auf dem neuesten
-   Stand aufsetzen, nie auf einer alten Version arbeiten.
-2. **Am Ende jeder Sitzung die Arbeit sofort `git commit` + `git push`.**
-   Niemals fertige oder halbfertige Arbeit nur lokal liegen lassen — genau das
-   erzeugt später Konflikte. Git ist die *einzige* gemeinsame Wahrheit; die
-   Agenten synchronisieren sich ausschließlich über das GitHub-Repo, nie direkt.
-3. **Aussagekräftige deutsche Commit-Nachrichten** schreiben (was wurde geändert
-   und warum), damit die andere Person und die andere KI den Verlauf verstehen.
-4. Wenn `git pull` einen **Konflikt** meldet: nicht raten. Die betroffenen
-   Stellen sorgfältig zusammenführen, dabei die Absicht **beider** Änderungen
-   erhalten, und den Nutzer informieren, falls etwas unklar ist.
-5. Vor größeren Umbauten (neue Architektur, neue Abhängigkeit, geänderter
-   Spielablauf) den Nutzer **kurz um Bestätigung fragen** — solche Entscheidungen
-   gehören den Projektinhabern, nicht dem Agenten.
+### Getrennte Arbeitsordner (Git-Worktrees)
+
+Damit sich die beiden nie gegenseitig überschreiben, hat **jeder Agent seinen
+eigenen Ordner mit eigenem Branch** — sie teilen sich dasselbe Repo, arbeiten
+aber physisch getrennt:
+
+| Agent  | Ordner          | Branch  |
+|--------|-----------------|---------|
+| Claude | `no-food/`      | `main`  |
+| Kimi   | `no-food-kimi/` | `kimi`  |
+
+**Jeder Agent bleibt in seinem eigenen Ordner/Branch** und wechselt ihn nicht.
+So können beide gleichzeitig tippen, ohne sich in die Quere zu kommen.
+
+### Ablauf für jeden Agenten
+
+1. **Vor der Arbeit `git pull`** — neuesten Stand des eigenen Branches holen.
+2. **Nach der Arbeit sofort `git commit` + `git push`** (auf den eigenen Branch).
+   Niemals Arbeit nur lokal liegen lassen — Git ist die *einzige* gemeinsame
+   Wahrheit; die Agenten synchronisieren sich ausschließlich über GitHub.
+3. **Aussagekräftige deutsche Commit-Nachrichten** (was geändert, warum).
+4. Vor größeren Umbauten (neue Architektur, neue Abhängigkeit, geänderter
+   Spielablauf) den Nutzer **kurz um Bestätigung fragen**.
+
+### Zusammenführen (Merge) — nur auf Ansage des Nutzers
+
+Die beiden Branches werden von Zeit zu Zeit in `main` zusammengeführt. Das macht
+**nur ein Agent auf ausdrückliche Bitte des Nutzers** (nicht selbstständig):
+`git merge` von `kimi` nach `main`. Bei einem **Konflikt** nicht raten — beide
+Änderungsabsichten erhalten und den Nutzer informieren, falls unklar.
+
+### Damit Merges konfliktfrei bleiben: Arbeit aufteilen
+
+Konflikte entstehen, wenn beide Agenten **dieselben Zeilen** ändern. Deshalb:
+die zwei Agenten sollten möglichst an **verschiedenen Bereichen/Dateien** oder
+klar getrennten Features arbeiten. Wenn eine Änderung Server **und** Client
+betrifft (z.B. eine neue Netzwerk-Nachricht), sollte sie **ein** Agent komplett
+machen, nicht beide halb.
 
 ## Technologie-Stack
 
