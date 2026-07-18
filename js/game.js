@@ -40,6 +40,19 @@ let RECIPES = {};
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+// Tier-Sprites (ersetzen die früher per Code gezeichneten Formen)
+const ANIMAL_SPRITES = {
+  rabbit: "assets/rabbit.png",
+  wolf: "assets/wolf.png",
+  spider: "assets/spider.png",
+};
+const animalImages = {};
+for (const [species, src] of Object.entries(ANIMAL_SPRITES)) {
+  const img = new Image();
+  img.src = src;
+  animalImages[species] = img;
+}
+
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -715,62 +728,23 @@ function drawAnimal(a) {
 
   const r = a.radius;
 
-  if (a.species === "rabbit") {
-    // Ohren (hinten, oben und unten)
-    ctx.fillStyle = "#d7b98a";
-    ctx.strokeStyle = "#8d6e42";
-    ctx.beginPath();
-    ctx.arc(-r * 0.7, -r * 0.6, r * 0.35, 0, Math.PI * 2);
-    ctx.arc(-r * 0.7, r * 0.6, r * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Körper
-    ctx.fillStyle = "#c8a165";
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  } else if (a.species === "spider") {
-    // Beine (Striche nach allen Seiten)
-    ctx.strokeStyle = "#3e2723";
-    for (let i = 0; i < 8; i++) {
-      const legAngle = (i / 8) * Math.PI * 2;
+  if (a.species === "rabbit" || a.species === "spider" || a.species === "wolf") {
+    // Sprite-Bild verwenden (ersetzt die frühere Vektor-Zeichnung)
+    const img = animalImages[a.species];
+    const size = r * 2.6; // Sprite etwas größer als der Kollisionsradius zeichnen
+    if (img && img.complete && img.naturalWidth > 0) {
+      const aspect = img.naturalWidth / img.naturalHeight;
+      const h = size;
+      const w = size * aspect;
+      // Bild schaut per Default nach rechts (in Laufrichtung 0), passend zu ctx.rotate(a.angle)
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    } else {
+      // Fallback, solange das Bild noch lädt: einfacher Kreis
+      ctx.fillStyle = "#999";
       ctx.beginPath();
-      ctx.moveTo(Math.cos(legAngle) * r * 0.5, Math.sin(legAngle) * r * 0.5);
-      ctx.lineTo(Math.cos(legAngle) * r * 1.7, Math.sin(legAngle) * r * 1.7);
-      ctx.stroke();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
     }
-    // Körper
-    ctx.fillStyle = "#4e342e";
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    // Rote Augen (vorne)
-    ctx.fillStyle = "#e53935";
-    ctx.beginPath();
-    ctx.arc(r * 0.5, -r * 0.3, 3, 0, Math.PI * 2);
-    ctx.arc(r * 0.5, r * 0.3, 3, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (a.species === "wolf") {
-    // Ohren (hinten)
-    ctx.fillStyle = "#78909c";
-    ctx.strokeStyle = "#455a64";
-    ctx.beginPath();
-    ctx.arc(-r * 0.4, -r * 0.8, r * 0.3, 0, Math.PI * 2);
-    ctx.arc(-r * 0.4, r * 0.8, r * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Körper
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Schnauze (vorne)
-    ctx.fillStyle = "#b0bec5";
-    ctx.beginPath();
-    ctx.arc(r * 0.85, 0, r * 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
   } else if (a.species === "bear") {
     // Ohren (hinten)
     ctx.fillStyle = "#eceff1";

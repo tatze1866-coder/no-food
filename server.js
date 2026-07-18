@@ -181,6 +181,9 @@ const FILES = {
   "/index.html": ["index.html", "text/html"],
   "/style.css": ["style.css", "text/css"],
   "/js/game.js": ["js/game.js", "text/javascript"],
+  "/assets/rabbit.png": ["assets/rabbit.png", "image/png"],
+  "/assets/wolf.png": ["assets/wolf.png", "image/png"],
+  "/assets/spider.png": ["assets/spider.png", "image/png"],
 };
 
 const server = http.createServer((req, res) => {
@@ -197,7 +200,8 @@ const server = http.createServer((req, res) => {
       res.end("500 — Datei konnte nicht gelesen werden");
       return;
     }
-    res.writeHead(200, { "Content-Type": contentType + "; charset=utf-8" });
+    const isText = contentType.startsWith("text/") || contentType.includes("javascript");
+    res.writeHead(200, { "Content-Type": isText ? contentType + "; charset=utf-8" : contentType });
     res.end(data);
   });
 });
