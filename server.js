@@ -54,6 +54,34 @@ const CONFIG = {
   forestGoldOre: 35,      // Golderz im Wald: selten
   snowGoldOre: 130,       // Golderz im Schnee: häufig
   snowIronOre: 35,        // Eisenerz im Schnee: selten
+  // Diamant: NUR im Schnee (wie im Wiki: "nur im Winter oder in der von
+  // Drachen bewachten Höhle" — die Höhle gibt es in no-food noch nicht,
+  // deshalb aktuell ausschließlich Schnee-Vorkommen). Deutlich seltener als Gold.
+  snowDiamond: 28,
+
+  // Erz-Vorkommen sind begrenzte Lagerstätten, die sich mit der Zeit wieder
+  // auffüllen (wie im Wiki beschrieben) — anders als Bäume/Steine, die
+  // unbegrenzt sind. amount = aktueller Vorrat, maxAmount = volle Größe.
+  oreRegenInterval: 10,   // Sekunden zwischen zwei Nachwachs-Schüben (wie im Wiki: "alle 10 Sekunden")
+  stoneMaxAmount: 120,    // Stein-Vorkommen: Vorrat pro Lagerstätte
+  stoneRegenMin: 1,       // Stein wächst 1-4 pro Schub nach (abhängig von Größe)
+  stoneRegenMax: 4,
+  goldMaxAmount: 90,      // Gold-Vorkommen: Vorrat pro Lagerstätte
+  goldRegenMin: 1,        // Gold wächst 1-3 pro Schub nach
+  goldRegenMax: 3,
+  diamondMaxAmount: 40,   // Diamant-Vorkommen: Vorrat pro Lagerstätte
+  diamondRegenMin: 1,     // Diamant wächst 1-2 pro Schub nach (große Vorkommen: doppelt)
+  diamondRegenMax: 2,
+  diamondLargeChance: 0.2, // 20% der Diamant-Vorkommen sind "groß": mehr Vorrat + doppeltes Nachwachsen
+
+  // Ausbeute pro Schlag, gestaffelt nach Spitzhacken-Stufe — Index 0-4:
+  // [bloße Hand, Holz-Spitzhacke, Eisen-Spitzhacke, Gold-Spitzhacke, Diamant-Spitzhacke].
+  // Genau wie im Wiki: Stein mit JEDER Spitzhacke abbaubar (auch bloßer Hand,
+  // sonst käme man nie an die erste Spitzhacke); Gold braucht mindestens eine
+  // Spitzhacke; Diamant braucht mindestens eine Gold-Spitzhacke.
+  stoneYieldByTier:   [1, 1, 2, 3, 4],
+  goldYieldByTier:    [0, 1, 2, 3, 4],
+  diamondYieldByTier: [0, 0, 0, 1, 2],
 
   bushBerries: 4,         // Beeren pro Strauch
   berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
@@ -91,15 +119,19 @@ const CONFIG = {
   axeWoodBonus: 2,        // Extra-Holz mit Holz-Axt
   axeIronBonus: 4,        // Extra-Holz mit Eisen-Axt
   axeGoldBonus: 7,        // Extra-Holz mit Gold-Axt
-  pickaxeStoneBonus: 2,   // Extra-Stein/Erz mit Holz-Spitzhacke
-  pickaxeIronBonus: 4,    // Extra-Stein/Erz mit Eisen-Spitzhacke
-  pickaxeGoldBonus: 7,    // Extra-Stein/Erz mit Gold-Spitzhacke
+  axeDiamondBonus: 11,    // Extra-Holz mit Diamant-Axt
+  pickaxeStoneBonus: 2,   // Extra-Eisenerz mit Holz-Spitzhacke (nur noch für Eisenerz genutzt)
+  pickaxeIronBonus: 4,    // Extra-Eisenerz mit Eisen-Spitzhacke
+  pickaxeGoldBonus: 7,    // Extra-Eisenerz mit Gold-Spitzhacke
+  pickaxeDiamondBonus: 11, // Extra-Eisenerz mit Diamant-Spitzhacke
   swordDamageBonus: 12,   // Extra-Schaden mit Holz-Schwert
   swordIronDamageBonus: 20, // Extra-Schaden mit Eisen-Schwert
   swordGoldDamageBonus: 30, // Extra-Schaden mit Gold-Schwert
+  swordDiamondDamageBonus: 45, // Extra-Schaden mit Diamant-Schwert
   spearDamageBonus: 20,   // Extra-Schaden mit Holz-Speer
   spearIronDamageBonus: 32, // Extra-Schaden mit Eisen-Speer
   spearGoldDamageBonus: 45, // Extra-Schaden mit Gold-Speer
+  spearDiamondDamageBonus: 65, // Extra-Schaden mit Diamant-Speer
   rawMeatFood: 25,        // Hunger durch rohes Fleisch (weniger als gebraten)
   cookedMeatFood: 40,     // Hunger durch gebratenes Fleisch
 
@@ -135,11 +167,12 @@ const ITEMS = {
   berry:       { name: "Beere",           icon: "🍓", food: true },
   iron_ore:    { name: "Eisenerz",        icon: "⚙️" },
   gold_ore:    { name: "Golderz",         icon: "🥇" },
+  diamond:     { name: "Diamant",         icon: "💎" },
 
   // Werkzeuge (ausrüstbar) — "image" zeigt auf ein eigenes Icon-Bild,
   // das der Client statt des Emojis anzeigt (icon bleibt als Fallback).
-  // Drei Stufen pro Werkzeug: Holz < Eisen < Gold (Eisen/Gold ohne
-  // eigenes Bild, da noch keine Sprites dafür existieren).
+  // Vier Stufen pro Werkzeug: Holz < Eisen < Gold < Diamant (Eisen/Gold/
+  // Diamant ohne eigenes Bild, da noch keine Sprites dafür existieren).
   axe:         { name: "Holz Axt",        icon: "🪓", image: "assets/tool-axe.png",     tool: true },
   pickaxe:     { name: "Holz Spitzhacke", icon: "⛏️", image: "assets/tool-pickaxe.png", tool: true },
   sword:       { name: "Holz Schwert",    icon: "🗡️", image: "assets/tool-sword.png",   tool: true },
@@ -154,6 +187,11 @@ const ITEMS = {
   gold_pickaxe: { name: "Gold Spitzhacke",  icon: "⛏️", tool: true },
   gold_sword:   { name: "Gold Schwert",     icon: "🗡️", tool: true },
   gold_spear:   { name: "Gold Speer",       icon: "🔱", tool: true },
+
+  diamond_axe:     { name: "Diamant Axt",        icon: "🪓", tool: true },
+  diamond_pickaxe: { name: "Diamant Spitzhacke", icon: "⛏️", tool: true },
+  diamond_sword:   { name: "Diamant Schwert",    icon: "🗡️", tool: true },
+  diamond_spear:   { name: "Diamant Speer",      icon: "🔱", tool: true },
 
   // Platzierbar / Upgrade
   campfire:    { name: "Lagerfeuer",      icon: "🔥" },
@@ -187,6 +225,11 @@ const RECIPES = {
   gold_pickaxe: { name: "Gold Spitzhacke",  cost: { wood: 3, gold_ore: 7 }, result: { gold_pickaxe: 1 } },
   gold_sword:   { name: "Gold Schwert",     cost: { wood: 4, gold_ore: 6 }, result: { gold_sword: 1 } },
   gold_spear:   { name: "Gold Speer",       cost: { wood: 5, gold_ore: 7 }, result: { gold_spear: 1 } },
+
+  diamond_axe:     { name: "Diamant Axt",        cost: { wood: 3, diamond: 4 }, result: { diamond_axe: 1 } },
+  diamond_pickaxe: { name: "Diamant Spitzhacke", cost: { wood: 3, diamond: 6 }, result: { diamond_pickaxe: 1 } },
+  diamond_sword:   { name: "Diamant Schwert",    cost: { wood: 4, diamond: 5 }, result: { diamond_sword: 1 } },
+  diamond_spear:   { name: "Diamant Speer",      cost: { wood: 5, diamond: 6 }, result: { diamond_spear: 1 } },
 
   campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
   backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
@@ -232,6 +275,19 @@ function dist(x1, y1, x2, y2) {
 // Wert zwischen min und max begrenzen
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+// Welche Spitzhacken-Stufe hat der Spieler ausgerüstet? Index passend zu
+// den *YieldByTier-Tabellen in CONFIG: 0 = bloße Hand, 1 = Holz, 2 = Eisen,
+// 3 = Gold, 4 = Diamant.
+function pickaxeTier(equipped) {
+  switch (equipped) {
+    case "diamond_pickaxe": return 4;
+    case "gold_pickaxe": return 3;
+    case "iron_pickaxe": return 2;
+    case "pickaxe": return 1;
+    default: return 0;
+  }
 }
 
 // ---------- 3. STATISCHER DATEISERVER ----------
@@ -371,25 +427,44 @@ function createWorld() {
     resources.push({ type: "tree", x: pos.x, y: pos.y, radius: rand(38, 55) });
   }
 
-  // Steine (Wald + Schnee)
+  // Steine (Wald + Schnee) — begrenzter Vorrat, der mit der Zeit nachwächst
   for (let i = 0; i < CONFIG.forestRocks + CONFIG.snowRocks; i++) {
     const biome = i < CONFIG.forestRocks ? forest : snow;
     const pos = randInBiome(biome, 60);
-    resources.push({ type: "rock", x: pos.x, y: pos.y, radius: rand(26, 38) });
+    resources.push({
+      type: "rock", x: pos.x, y: pos.y, radius: rand(26, 38),
+      amount: CONFIG.stoneMaxAmount, maxAmount: CONFIG.stoneMaxAmount, oreRegrowTimer: 0,
+    });
   }
 
-  // Eisenerz (viel im Wald, wenig im Schnee)
+  // Eisenerz (viel im Wald, wenig im Schnee) — unbegrenzt, wie gehabt
   for (let i = 0; i < CONFIG.forestIronOre + CONFIG.snowIronOre; i++) {
     const biome = i < CONFIG.forestIronOre ? forest : snow;
     const pos = randInBiome(biome, 60);
     resources.push({ type: "iron_ore", x: pos.x, y: pos.y, radius: rand(24, 34) });
   }
 
-  // Golderz (viel im Schnee, wenig im Wald)
+  // Golderz (viel im Schnee, wenig im Wald) — begrenzter Vorrat, wächst nach
   for (let i = 0; i < CONFIG.snowGoldOre + CONFIG.forestGoldOre; i++) {
     const biome = i < CONFIG.snowGoldOre ? snow : forest;
     const pos = randInBiome(biome, 60);
-    resources.push({ type: "gold_ore", x: pos.x, y: pos.y, radius: rand(24, 34) });
+    resources.push({
+      type: "gold_ore", x: pos.x, y: pos.y, radius: rand(24, 34),
+      amount: CONFIG.goldMaxAmount, maxAmount: CONFIG.goldMaxAmount, oreRegrowTimer: 0,
+    });
+  }
+
+  // Diamant — wie im Wiki NUR im Schnee-Biom (dort auch nur an wenigen
+  // Stellen, deutlich seltener als Gold). 20% der Vorkommen sind "groß":
+  // mehr Vorrat und doppelt so schnelles Nachwachsen.
+  for (let i = 0; i < CONFIG.snowDiamond; i++) {
+    const pos = randInBiome(snow, 60);
+    const large = Math.random() < CONFIG.diamondLargeChance;
+    const maxAmount = large ? CONFIG.diamondMaxAmount * 2 : CONFIG.diamondMaxAmount;
+    resources.push({
+      type: "diamond", x: pos.x, y: pos.y, radius: rand(24, 34),
+      amount: maxAmount, maxAmount, large, oreRegrowTimer: 0,
+    });
   }
 
   // Beerensträucher (Wald + Schnee)
@@ -455,6 +530,11 @@ function worldForClient() {
   return resources.map((res) => {
     const r = { type: res.type, x: Math.round(res.x), y: Math.round(res.y), radius: Math.round(res.radius) };
     if (res.type === "bush") r.berries = res.berries;
+    if (res.type === "rock" || res.type === "gold_ore" || res.type === "diamond") {
+      r.amount = res.amount;
+      r.maxAmount = res.maxAmount;
+      if (res.large) r.large = true;
+    }
     return r;
   });
 }
@@ -468,6 +548,10 @@ let nextPlayerId = 1;
 
 // Busch-Nummern, deren Beerenstand sich seit dem letzten Senden geändert hat
 const changedBushes = new Set();
+// Erz-Nummern (Stein/Gold/Diamant), deren Vorrat sich seit dem letzten
+// Senden geändert hat (abgebaut oder nachgewachsen) — gleiches Prinzip wie
+// changedBushes, nur für Erz-Vorkommen.
+const changedOres = new Set();
 
 // ---------- STRUKTUREN (vom Spieler platziert, z.B. Lagerfeuer) ----------
 // Bewusst ein EIGENES Array (nicht `resources`, das ist der Biom-/Karten-Teil),
@@ -755,6 +839,26 @@ function update(dt) {
     }
   }
 
+  // --- Erz-Vorkommen wachsen nach (Stein, Gold, Diamant) ---
+  // Jedes Vorkommen hat einen begrenzten Vorrat (amount/maxAmount), der sich
+  // alle CONFIG.oreRegenInterval Sekunden um einen Zufallsbetrag auffüllt —
+  // genau wie im Wiki beschrieben ("wächst alle 10 Sekunden nach").
+  for (let i = 0; i < resources.length; i++) {
+    const res = resources[i];
+    if (res.type !== "rock" && res.type !== "gold_ore" && res.type !== "diamond") continue;
+    if (res.amount >= res.maxAmount) continue;
+    res.oreRegrowTimer += dt;
+    if (res.oreRegrowTimer >= CONFIG.oreRegenInterval) {
+      res.oreRegrowTimer = 0;
+      let regenAmt;
+      if (res.type === "rock") regenAmt = Math.round(rand(CONFIG.stoneRegenMin, CONFIG.stoneRegenMax));
+      else if (res.type === "gold_ore") regenAmt = Math.round(rand(CONFIG.goldRegenMin, CONFIG.goldRegenMax));
+      else regenAmt = Math.round(rand(CONFIG.diamondRegenMin, CONFIG.diamondRegenMax)) * (res.large ? 2 : 1);
+      res.amount = Math.min(res.maxAmount, res.amount + Math.max(1, regenAmt));
+      changedOres.add(i);
+    }
+  }
+
   // --- Lagerfeuer brennen herunter; ausgebrannte werden entfernt ---
   for (let i = structures.length - 1; i >= 0; i--) {
     const s = structures[i];
@@ -907,9 +1011,11 @@ function tryHit(player) {
     if (player.equipped === "spear") damage += CONFIG.spearDamageBonus;
     else if (player.equipped === "iron_spear") damage += CONFIG.spearIronDamageBonus;
     else if (player.equipped === "gold_spear") damage += CONFIG.spearGoldDamageBonus;
+    else if (player.equipped === "diamond_spear") damage += CONFIG.spearDiamondDamageBonus;
     else if (player.equipped === "sword") damage += CONFIG.swordDamageBonus;
     else if (player.equipped === "iron_sword") damage += CONFIG.swordIronDamageBonus;
     else if (player.equipped === "gold_sword") damage += CONFIG.swordGoldDamageBonus;
+    else if (player.equipped === "diamond_sword") damage += CONFIG.swordDiamondDamageBonus;
     closestAnimal.health -= damage;
     if (closestAnimal.health <= 0) {
       closestAnimal.dead = true;
@@ -923,32 +1029,52 @@ function tryHit(player) {
   if (!closest) return;
 
   if (closest.type === "tree") {
-    // Mit Axt gibt's mehr Holz — Eisen mehr als Holz, Gold am meisten
+    // Mit Axt gibt's mehr Holz — Eisen mehr als Holz, Gold mehr als Eisen, Diamant am meisten
     let amount = CONFIG.woodPerHit;
     if (player.equipped === "axe") amount += CONFIG.axeWoodBonus;
     else if (player.equipped === "iron_axe") amount += CONFIG.axeIronBonus;
     else if (player.equipped === "gold_axe") amount += CONFIG.axeGoldBonus;
+    else if (player.equipped === "diamond_axe") amount += CONFIG.axeDiamondBonus;
     giveItem(player, "wood", amount);
   } else if (closest.type === "rock") {
-    // Mit Spitzhacke gibt's mehr Stein — Eisen mehr als Holz, Gold am meisten
-    let amount = CONFIG.stonePerHit;
-    if (player.equipped === "pickaxe") amount += CONFIG.pickaxeStoneBonus;
-    else if (player.equipped === "iron_pickaxe") amount += CONFIG.pickaxeIronBonus;
-    else if (player.equipped === "gold_pickaxe") amount += CONFIG.pickaxeGoldBonus;
-    giveItem(player, "stone", amount);
+    // Stein: mit JEDER Spitzhacke abbaubar (auch bloße Hand), aber höhere
+    // Spitzhacken-Stufen holen mehr pro Schlag (1/1/2/3/4, siehe CONFIG).
+    // Das Vorkommen hat einen begrenzten Vorrat, der nachwächst.
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.stoneYieldByTier[tier], closest.amount);
+    const added = giveItem(player, "stone", wanted);
+    if (added > 0) {
+      closest.amount -= added;
+      changedOres.add(closestIndex);
+    }
   } else if (closest.type === "iron_ore") {
     // Erz abbauen profitiert genauso von der Spitzhacke wie Stein
     let amount = CONFIG.orePerHit;
     if (player.equipped === "pickaxe") amount += CONFIG.pickaxeStoneBonus;
     else if (player.equipped === "iron_pickaxe") amount += CONFIG.pickaxeIronBonus;
     else if (player.equipped === "gold_pickaxe") amount += CONFIG.pickaxeGoldBonus;
+    else if (player.equipped === "diamond_pickaxe") amount += CONFIG.pickaxeDiamondBonus;
     giveItem(player, "iron_ore", amount);
   } else if (closest.type === "gold_ore") {
-    let amount = CONFIG.orePerHit;
-    if (player.equipped === "pickaxe") amount += CONFIG.pickaxeStoneBonus;
-    else if (player.equipped === "iron_pickaxe") amount += CONFIG.pickaxeIronBonus;
-    else if (player.equipped === "gold_pickaxe") amount += CONFIG.pickaxeGoldBonus;
-    giveItem(player, "gold_ore", amount);
+    // Gold: braucht mindestens eine Spitzhacke (bloße Hand bekommt nichts) —
+    // wie im Wiki: "gathered with a stone pickaxe or higher".
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.goldYieldByTier[tier], closest.amount);
+    const added = giveItem(player, "gold_ore", wanted);
+    if (added > 0) {
+      closest.amount -= added;
+      changedOres.add(closestIndex);
+    }
+  } else if (closest.type === "diamond") {
+    // Diamant: braucht mindestens eine Gold-Spitzhacke — wie im Wiki:
+    // "can gather it with only a gold or above pickaxe".
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.diamondYieldByTier[tier], closest.amount);
+    const added = giveItem(player, "diamond", wanted);
+    if (added > 0) {
+      closest.amount -= added;
+      changedOres.add(closestIndex);
+    }
   } else if (closest.type === "bush" && closest.berries > 0) {
     const added = giveItem(player, "berry", 1);
     if (added > 0) {
@@ -974,7 +1100,7 @@ function tryHit(player) {
 // Server -> Browser:
 //   { t: "welcome", id, config, items, recipes, world }   Begrüßung + Kataloge
 //                 (config enthält u.a. biomes für den Hintergrund)
-//   { t: "state", players, bushes, animals, night, structures }
+//   { t: "state", players, bushes, ores, animals, night, structures }
 //                 Spielstand (TICKS_PER_SECOND-mal/s); jeder Spieler mit
 //                 health, hunger, cold, inventory {id->Anzahl} + equipped
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
@@ -1027,6 +1153,14 @@ function stateMessage() {
   }
   changedBushes.clear();
 
+  // Nur die Erz-Vorkommen mitschicken, deren Vorrat sich geändert hat
+  // (abgebaut oder nachgewachsen): [Nummer, aktueller Vorrat]
+  const oreList = [];
+  for (const index of changedOres) {
+    oreList.push([index, resources[index].amount]);
+  }
+  changedOres.clear();
+
   // Nur lebende Tiere mitschicken (tote tauchen erst nach dem Respawn wieder auf)
   const animalList = [];
   for (const a of animals) {
@@ -1055,6 +1189,7 @@ function stateMessage() {
     t: "state",
     players: playerList,
     bushes: bushList,
+    ores: oreList,
     animals: animalList,
     night: isNight(),
     structures: structureList,
