@@ -502,12 +502,13 @@ function buildRecipeMenu() {
     row.className = "recipe";
     row.dataset.recipe = id;
 
-    // Kopf: Icon + Name des Ergebnisses
+    // Kopf: nur noch das Icon des Ergebnisses (Name als Tooltip beim Hover)
     const resultId = Object.keys(recipe.result)[0];
     const icon = ITEMS[resultId] ? itemIconHtml(resultId) : "";
+    row.title = recipe.name;
     const head = document.createElement("div");
     head.className = "recipe-head";
-    head.innerHTML = "<span>" + icon + "</span><span>" + recipe.name + "</span>";
+    head.innerHTML = "<span>" + icon + "</span>";
     row.appendChild(head);
 
     // Kosten-Zeile (wird von refreshRecipeMenu gefüllt)
@@ -520,7 +521,8 @@ function buildRecipeMenu() {
     if (recipe.requiresNear === "campfire") {
       const hint = document.createElement("div");
       hint.className = "recipe-hint";
-      hint.textContent = "🔥 nur am Lagerfeuer";
+      hint.textContent = "🔥";
+      hint.title = "nur am Lagerfeuer";
       row.appendChild(hint);
     }
 

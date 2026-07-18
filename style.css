@@ -243,7 +243,7 @@ body {
   position: fixed;
   top: 100px;
   right: 12px;
-  width: 340px;
+  width: 232px;
   max-height: 70vh;
   overflow-y: auto;
   background: rgba(30, 20, 10, 0.85);
@@ -264,15 +264,25 @@ body {
   text-align: center;
 }
 
-/* Eine Zeile im Bau-Menü: Icon + Name + Kosten. Die ganze Zeile ist
+/* Rezepte als Grid aus kleinen Kacheln statt langer Liste */
+#recipe-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Eine Kachel im Bau-Menü: nur Icon + Kosten. Der Name steht als
+   Tooltip (title-Attribut) auf der ganzen Kachel. Die ganze Kachel ist
    klickbar und baut das Rezept — kein extra Bauen-Knopf mehr. */
 .recipe {
+  width: 92px;
   background: rgba(255, 255, 255, 0.08);
   border: 2px solid rgba(0, 0, 0, 0.6);
   border-radius: 8px;
-  padding: 8px;
-  margin-bottom: 8px;
+  padding: 6px;
   cursor: pointer;
+  text-align: center;
   transition: background 0.15s, border-color 0.15s;
 }
 
@@ -299,21 +309,27 @@ body {
 .recipe-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
   font-size: 18px;
   font-weight: bold;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .recipe-head .icon-img {
-  width: 80px;
-  height: 80px;
+  width: 48px;
+  height: 48px;
 }
 
 .recipe-cost {
-  font-size: 13px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.8);
-  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.recipe-cost .icon-img {
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
 }
 
 /* Eine Zutat, die man nicht genug hat, wird rot markiert */
@@ -323,9 +339,8 @@ body {
 
 /* Hinweis, dass ein Rezept ein Lagerfeuer in der Nähe braucht */
 .recipe-hint {
-  font-size: 12px;
-  color: #ffcc80;
-  margin-bottom: 6px;
+  font-size: 16px;
+  margin-top: 2px;
 }
 
 /* Start-Bildschirm (Name eingeben und beitreten) */
