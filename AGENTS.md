@@ -15,6 +15,27 @@ Build-Schritt, keine Frameworks, genau **eine** npm-Abhängigkeit (`ws` für
 WebSockets). Der Browser-Code läuft weiterhin direkt als klassisches
 `<script>`-Tag, der Server ist eine einzige Node.js-Datei.
 
+## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
+
+An diesem Projekt arbeiten **mehrere verschiedene KI-Assistenten** (z.B. Claude
+und Kimi), gesteuert von zwei Personen ohne Programmiererfahrung. Damit sich die
+Änderungen nicht gegenseitig überschreiben, gilt für **jeden** Agenten:
+
+1. **Am Anfang jeder Sitzung `git pull`** ausführen — immer auf dem neuesten
+   Stand aufsetzen, nie auf einer alten Version arbeiten.
+2. **Am Ende jeder Sitzung die Arbeit sofort `git commit` + `git push`.**
+   Niemals fertige oder halbfertige Arbeit nur lokal liegen lassen — genau das
+   erzeugt später Konflikte. Git ist die *einzige* gemeinsame Wahrheit; die
+   Agenten synchronisieren sich ausschließlich über das GitHub-Repo, nie direkt.
+3. **Aussagekräftige deutsche Commit-Nachrichten** schreiben (was wurde geändert
+   und warum), damit die andere Person und die andere KI den Verlauf verstehen.
+4. Wenn `git pull` einen **Konflikt** meldet: nicht raten. Die betroffenen
+   Stellen sorgfältig zusammenführen, dabei die Absicht **beider** Änderungen
+   erhalten, und den Nutzer informieren, falls etwas unklar ist.
+5. Vor größeren Umbauten (neue Architektur, neue Abhängigkeit, geänderter
+   Spielablauf) den Nutzer **kurz um Bestätigung fragen** — solche Entscheidungen
+   gehören den Projektinhabern, nicht dem Agenten.
+
 ## Technologie-Stack
 
 - **Server:** Node.js (≥ 18) mit der Bibliothek `ws`. `server.js` macht beides:
