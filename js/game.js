@@ -840,6 +840,41 @@ function drawResource(res) {
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
     ctx.fill();
+  } else if (res.type === "diamond") {
+    // Diamant-Kristall (von Kimi): eisblaues Gestein mit heller Raute
+    ctx.fillStyle = "#4dd0e1";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Helle Einschlüsse im Kristall
+    ctx.fillStyle = "#b2ebf2";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    // Helle Raute in der Mitte als Erkennungszeichen
+    const dr = res.radius * 0.4;
+    ctx.fillStyle = "#e0f7fa";
+    ctx.strokeStyle = "#00838f";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - dr);
+    ctx.lineTo(x + dr, y);
+    ctx.lineTo(x, y + dr);
+    ctx.lineTo(x - dr, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Glanzlicht
+    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.beginPath();
+    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.2, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
