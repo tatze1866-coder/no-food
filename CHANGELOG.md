@@ -2,6 +2,19 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## Unveröffentlicht (Branch `main`)
+
+### Hinzugefügt
+- **Eigene Sprites für Polarfuchs, Eisbär und Mammut** (`assets/arctic-fox.png`,
+  `assets/polar-bear.png`, `assets/mammoth.png`), im selben Sticker-Stil wie
+  Hase/Wolf/Spinne (dicke farbige Kontur, glänzendes Highlight, große Augen —
+  passend zur Wiki-Beschreibung: weißer Fuchs mit roter Kontur/roten Augen,
+  weißer Bär, brauner Mammut mit Stoßzähnen). `drawAnimal()` in `js/game.js`
+  zeichnet jetzt **alle sechs** Tierarten einheitlich als gespiegelte
+  Frontal-Sprites statt die drei Schnee-Tiere per Vektor zu zeichnen; die
+  alte Vektor-Zeichnung wurde entfernt. Größen-Faktoren stehen in
+  `SPRITE_SCALE`.
+
 ## Unveröffentlicht (Branch `kimi`)
 
 ### Hinzugefügt

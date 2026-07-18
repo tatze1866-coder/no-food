@@ -46,6 +46,9 @@ const ANIMAL_SPRITES = {
   rabbit: "assets/rabbit.png",
   wolf: "assets/wolf.png",
   spider: "assets/spider.png",
+  arcticFox: "assets/arctic-fox.png",
+  polarBear: "assets/polar-bear.png",
+  mammoth: "assets/mammoth.png",
 };
 const animalImages = {};
 for (const [species, src] of Object.entries(ANIMAL_SPRITES)) {
@@ -884,11 +887,18 @@ function drawStructure(s) {
   ctx.fill();
 }
 
+// Jede Art hat ihre eigene Sprite-Größe (Vielfaches des Kollisionsradius).
+// rabbit/wolf/spider: alte, hochformatige Sprites mit viel Rand oben/unten.
+// arcticFox/polarBear/mammoth: neue, eng zugeschnittene quadratische Sprites.
+const SPRITE_SCALE = {
+  rabbit: 8.5, wolf: 13, spider: 26,
+  arcticFox: 3.0, polarBear: 3.0, mammoth: 3.1,
+};
+
 // Ein Tier zeichnen (Hase, Spinne, Wolf, Polarfuchs, Eisbär, Mammut).
-// Die Sprite-Tiere (Hase, Spinne, Wolf) bleiben aufrecht und spiegeln sich
-// nur nach links/rechts, je nachdem wohin sie gerade laufen — eine volle
-// Drehung würde bei diesen frontal gezeichneten Icons komisch aussehen.
-// Polarfuchs, Eisbär und Mammut werden klassisch gezeichnet und drehen sich komplett.
+// Alle sechs sind frontal gezeichnete Icon-Sprites: sie bleiben aufrecht und
+// spiegeln sich nur nach links/rechts, je nachdem wohin sie gerade laufen —
+// eine volle Drehung würde bei diesen frontalen Icons komisch aussehen.
 function drawAnimal(a) {
   // Wackel-Effekt beim Treffer (wie bei den Ressourcen)
   const shakeX = a.shake > 0 ? Math.sin(a.shake * 30) * 4 : 0;
@@ -899,127 +909,22 @@ function drawAnimal(a) {
 
   const r = a.radius;
 
-  if (a.species === "rabbit" || a.species === "spider" || a.species === "wolf") {
-    // Nach links oder rechts spiegeln, je nach Laufrichtung (kein Kippen)
-    const facingLeft = Math.cos(a.angle || 0) < 0;
-    if (facingLeft) ctx.scale(-1, 1);
+  // Nach links oder rechts spiegeln, je nach Laufrichtung (kein Kippen)
+  const facingLeft = Math.cos(a.angle || 0) < 0;
+  if (facingLeft) ctx.scale(-1, 1);
 
-    // Sprite-Bild verwenden (ersetzt die frühere Vektor-Zeichnung)
-    const img = animalImages[a.species];
-    // Jede Art hat ihre eigene Größe (Vielfaches des Kollisionsradius)
-    const SPRITE_SCALE = { rabbit: 8.5, wolf: 13, spider: 26 };
-    const size = r * (SPRITE_SCALE[a.species] || 6.5);
-    if (img && img.complete && img.naturalWidth > 0) {
-      const aspect = img.naturalWidth / img.naturalHeight;
-      const h = size;
-      const w = size * aspect;
-      ctx.drawImage(img, -w / 2, -h / 2, w, h);
-    } else {
-      // Fallback, solange das Bild noch lädt: einfacher Kreis
-      ctx.fillStyle = "#999";
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else if (a.species === "polarBear") {
-    ctx.rotate(a.angle || 0);
-    // Ohren (hinten)
-    ctx.fillStyle = "#eceff1";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(-r * 0.3, -r * 0.8, r * 0.3, 0, Math.PI * 2);
-    ctx.arc(-r * 0.3, r * 0.8, r * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Körper
+  const img = animalImages[a.species];
+  const size = r * (SPRITE_SCALE[a.species] || 6.5);
+  if (img && img.complete && img.naturalWidth > 0) {
+    const aspect = img.naturalWidth / img.naturalHeight;
+    const h = size;
+    const w = size * aspect;
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  } else {
+    // Fallback, solange das Bild noch lädt: einfacher Kreis
+    ctx.fillStyle = "#999";
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Schnauze (vorne)
-    ctx.fillStyle = "#cfd8dc";
-    ctx.beginPath();
-    ctx.arc(r * 0.8, 0, r * 0.45, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Nase + Augen
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-    ctx.arc(r * 1.15, 0, r * 0.1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#d32f2f";
-    ctx.beginPath();
-    ctx.arc(r * 0.35, -r * 0.28, r * 0.09, 0, Math.PI * 2);
-    ctx.arc(r * 0.35, r * 0.28, r * 0.09, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (a.species === "arcticFox") {
-    ctx.rotate(a.angle || 0);
-    // Spitze Ohren (hinten)
-    ctx.fillStyle = "#fff";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.15, -r * 0.55); ctx.lineTo(-r * 0.55, -r * 1.15); ctx.lineTo(-r * 0.65, -r * 0.4);
-    ctx.closePath();
-    ctx.moveTo(-r * 0.15, r * 0.55); ctx.lineTo(-r * 0.55, r * 1.15); ctx.lineTo(-r * 0.65, r * 0.4);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    // Spitze Schnauze (vorne) — ein Fuchs ist schlanker als ein Bär
-    ctx.beginPath();
-    ctx.moveTo(0, -r * 0.7);
-    ctx.lineTo(r * 1.2, -r * 0.1);
-    ctx.lineTo(r * 1.2, r * 0.1);
-    ctx.lineTo(0, r * 0.7);
-    ctx.quadraticCurveTo(-r * 0.5, 0, 0, -r * 0.7);
-    ctx.fill();
-    ctx.stroke();
-    // Nase + rote Augen
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-    ctx.arc(r * 1.15, 0, r * 0.09, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#e53935";
-    ctx.beginPath();
-    ctx.arc(r * 0.3, -r * 0.25, r * 0.08, 0, Math.PI * 2);
-    ctx.arc(r * 0.3, r * 0.25, r * 0.08, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (a.species === "mammoth") {
-    // Der Mini-Boss: großer brauner Körper mit zwei geschwungenen
-    // Stoßzähnen, dick umrandet, damit er sofort als Gefahr auffällt.
-    ctx.rotate(a.angle || 0);
-    ctx.fillStyle = "#6d4c35";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Ohren
-    ctx.fillStyle = "#5a3d29";
-    ctx.beginPath();
-    ctx.arc(-r * 0.55, -r * 0.75, r * 0.35, 0, Math.PI * 2);
-    ctx.arc(-r * 0.55, r * 0.75, r * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Stoßzähne (weiß, geschwungen)
-    ctx.strokeStyle = "#fdf6e3";
-    ctx.lineWidth = r * 0.22;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(r * 0.5, r * 0.35);
-    ctx.quadraticCurveTo(r * 1.3, r * 0.55, r * 1.15, r * 0.05);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(r * 0.5, -r * 0.35);
-    ctx.quadraticCurveTo(r * 1.3, -r * 0.55, r * 1.15, -r * 0.05);
-    ctx.stroke();
-    // Rote Augen
-    ctx.fillStyle = "#e53935";
-    ctx.beginPath();
-    ctx.arc(r * 0.3, -r * 0.3, r * 0.1, 0, Math.PI * 2);
-    ctx.arc(r * 0.3, r * 0.3, r * 0.1, 0, Math.PI * 2);
     ctx.fill();
   }
 
