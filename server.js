@@ -76,6 +76,7 @@ const CONFIG = {
   stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
   axeWoodBonus: 2,        // Extra-Holz, wenn eine Axt ausgerüstet ist
   pickaxeStoneBonus: 2,   // Extra-Stein, wenn eine Spitzhacke ausgerüstet ist
+  swordDamageBonus: 12,   // Extra-Schaden gegen Tiere mit ausgerüstetem Schwert
   spearDamageBonus: 20,   // Extra-Schaden gegen Tiere mit ausgerüstetem Speer
   rawMeatFood: 25,        // Hunger durch rohes Fleisch (weniger als gebraten)
   cookedMeatFood: 40,     // Hunger durch gebratenes Fleisch
@@ -107,10 +108,12 @@ const ITEMS = {
   stone:       { name: "Stein",           icon: "🪨" },
   berry:       { name: "Beere",           icon: "🍓", food: true },
 
-  // Werkzeuge (ausrüstbar)
-  axe:         { name: "Axt",             icon: "🪓", tool: true },
-  pickaxe:     { name: "Spitzhacke",      icon: "⛏️", tool: true },
-  spear:       { name: "Speer",           icon: "🔱", tool: true },
+  // Werkzeuge (ausrüstbar) — "image" zeigt auf ein eigenes Icon-Bild,
+  // das der Client statt des Emojis anzeigt (icon bleibt als Fallback).
+  axe:         { name: "Holz Axt",        icon: "🪓", image: "assets/tool-axe.png",     tool: true },
+  pickaxe:     { name: "Holz Spitzhacke", icon: "⛏️", image: "assets/tool-pickaxe.png", tool: true },
+  sword:       { name: "Holz Schwert",    icon: "🗡️", image: "assets/tool-sword.png",   tool: true },
+  spear:       { name: "Holz Speer",      icon: "🔱", image: "assets/tool-spear.png",   tool: true },
 
   // Platzierbar / Upgrade
   campfire:    { name: "Lagerfeuer",      icon: "🔥" },
@@ -129,9 +132,10 @@ const ITEMS = {
 // ---------- RECIPES: Crafting-Rezepte ----------
 // Jedes Rezept: was es kostet (cost) und was dabei herauskommt (result).
 const RECIPES = {
-  axe:      { name: "Axt",        cost: { wood: 3, stone: 3 },  result: { axe: 1 } },
-  pickaxe:  { name: "Spitzhacke", cost: { wood: 3, stone: 5 },  result: { pickaxe: 1 } },
-  spear:    { name: "Speer",      cost: { wood: 5, stone: 5 },  result: { spear: 1 } },
+  axe:      { name: "Holz Axt",        cost: { wood: 3, stone: 3 },  result: { axe: 1 } },
+  pickaxe:  { name: "Holz Spitzhacke", cost: { wood: 3, stone: 5 },  result: { pickaxe: 1 } },
+  sword:    { name: "Holz Schwert",    cost: { wood: 4, stone: 4 },  result: { sword: 1 } },
+  spear:    { name: "Holz Speer",      cost: { wood: 5, stone: 5 },  result: { spear: 1 } },
   campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
   backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
   // Kochen: braucht rohes Fleisch (von Tieren) UND Nähe zum Lagerfeuer
@@ -184,6 +188,10 @@ const FILES = {
   "/assets/rabbit.png": ["assets/rabbit.png", "image/png"],
   "/assets/wolf.png": ["assets/wolf.png", "image/png"],
   "/assets/spider.png": ["assets/spider.png", "image/png"],
+  "/assets/tool-axe.png": ["assets/tool-axe.png", "image/png"],
+  "/assets/tool-pickaxe.png": ["assets/tool-pickaxe.png", "image/png"],
+  "/assets/tool-sword.png": ["assets/tool-sword.png", "image/png"],
+  "/assets/tool-spear.png": ["assets/tool-spear.png", "image/png"],
 };
 
 const server = http.createServer((req, res) => {
@@ -765,6 +773,7 @@ function tryHit(player) {
     const type = ANIMAL_TYPES[closestAnimal.species];
     let damage = CONFIG.playerDamage;
     if (player.equipped === "spear") damage += CONFIG.spearDamageBonus;
+    else if (player.equipped === "sword") damage += CONFIG.swordDamageBonus;
     closestAnimal.health -= damage;
     if (closestAnimal.health <= 0) {
       closestAnimal.dead = true;

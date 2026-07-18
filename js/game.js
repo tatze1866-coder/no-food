@@ -53,6 +53,30 @@ for (const [species, src] of Object.entries(ANIMAL_SPRITES)) {
   animalImages[species] = img;
 }
 
+// Item-Icon-Bilder (Werkzeuge mit eigenem Sprite statt Emoji).
+// Werden erst bei Bedarf geladen, da ITEMS erst mit "welcome" vom Server kommt.
+const itemImages = {};
+function getItemImage(id) {
+  const item = ITEMS[id];
+  if (!item || !item.image) return null;
+  if (!itemImages[id]) {
+    const img = new Image();
+    img.src = item.image;
+    itemImages[id] = img;
+  }
+  return itemImages[id];
+}
+
+// HTML-Schnipsel für ein Item-Icon: Bild, wenn vorhanden, sonst Emoji.
+function itemIconHtml(id) {
+  const item = ITEMS[id];
+  if (!item) return "";
+  if (item.image) {
+    return '<img class="icon-img" src="' + item.image + '" alt="">';
+  }
+  return item.icon;
+}
+
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -433,7 +457,7 @@ function updateInventory(me) {
 
     if (id) {
       const item = ITEMS[id];
-      html += '<span class="icon">' + item.icon + "</span><span>" + inv[id] + "</span>";
+      html += '<span class="icon">' + itemIconHtml(id) + "</span><span>" + inv[id] + "</span>";
 
       // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
       if (item.tool) {
@@ -479,7 +503,7 @@ function buildRecipeMenu() {
 
     // Kopf: Icon + Name des Ergebnisses
     const resultId = Object.keys(recipe.result)[0];
-    const icon = ITEMS[resultId] ? ITEMS[resultId].icon : "";
+    const icon = ITEMS[resultId] ? itemIconHtml(resultId) : "";
     const head = document.createElement("div");
     head.className = "recipe-head";
     head.innerHTML = "<span>" + icon + "</span><span>" + recipe.name + "</span>";
@@ -526,7 +550,7 @@ function refreshRecipeMenu(me) {
       const have = inv[need] || 0;
       const enough = have >= recipe.cost[need];
       if (!enough) affordable = false;
-      const itemIcon = ITEMS[need] ? ITEMS[need].icon : need;
+      const itemIcon = ITEMS[need] ? itemIconHtml(need) : need;
       const cls = enough ? "" : ' class="cost-missing"';
       parts.push("<span" + cls + ">" + itemIcon + " " + have + "/" + recipe.cost[need] + "</span>");
     }
@@ -819,10 +843,17 @@ function drawPlayer(p) {
 
   // Ausgerüstetes Werkzeug in der rechten Hand zeigen
   if (p.equipped && ITEMS[p.equipped]) {
-    ctx.font = "20px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(ITEMS[p.equipped].icon, r * 0.95 + punch, r * 0.6);
+    const toolImg = getItemImage(p.equipped);
+    if (toolImg && toolImg.complete && toolImg.naturalWidth > 0) {
+      const th = r * 1.7;
+      const tw = th * (toolImg.naturalWidth / toolImg.naturalHeight);
+      ctx.drawImage(toolImg, r * 0.95 + punch - tw / 2, r * 0.6 - th / 2, tw, th);
+    } else {
+      ctx.font = "20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(ITEMS[p.equipped].icon, r * 0.95 + punch, r * 0.6);
+    }
   }
 
   ctx.restore();

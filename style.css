@@ -47,6 +47,19 @@ body {
   font-size: 20px;
 }
 
+/* Werkzeug-Icon als Bild statt Emoji: passend zur Emoji-Größe skaliert */
+.icon-img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.recipe-cost .icon-img {
+  width: 14px;
+  height: 14px;
+}
+
 /* Kleine Nummer (Taste 1–9) oben links in der Box */
 .slot-num {
   position: absolute;
@@ -243,6 +256,11 @@ body {
   font-size: 16px;
   font-weight: bold;
   margin-bottom: 4px;
+}
+
+.recipe-head .icon-img {
+  width: 26px;
+  height: 26px;
 }
 
 .recipe-cost {
