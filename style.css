@@ -133,3 +133,78 @@ body {
 #restart-btn:hover {
   background: #2e7d32;
 }
+
+/* Spielerzahl oben rechts */
+#player-count {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: bold;
+}
+
+/* Start-Bildschirm (Name eingeben und beitreten) */
+#start-screen {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #fff;
+}
+
+#start-screen.hidden {
+  display: none;
+}
+
+#start-screen h1 {
+  font-size: 48px;
+}
+
+#name-input {
+  padding: 12px 16px;
+  font-size: 20px;
+  text-align: center;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  outline: none;
+}
+
+#name-input:focus {
+  border-color: #fff;
+}
+
+#start-btn {
+  padding: 12px 32px;
+  font-size: 20px;
+  font-weight: bold;
+  color: #fff;
+  background: #43a047;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+#start-btn:hover:not(:disabled) {
+  background: #2e7d32;
+}
+
+#start-btn:disabled {
+  background: #777;
+  cursor: wait;
+}
+
+#start-status {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}

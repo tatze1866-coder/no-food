@@ -1,0 +1,15 @@
+{
+  "name": "no-food",
+  "version": "1.0.0",
+  "description": "Ein kleines 2D-Überlebensspiel im Browser mit Online-Multiplayer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

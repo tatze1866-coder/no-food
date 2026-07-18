@@ -22,9 +22,21 @@
     <div class="bar"><div id="hunger-fill" class="fill hunger"></div><span class="bar-label">🍖 Hunger</span></div>
   </div>
 
+  <!-- Anzeige oben rechts: Mitspieler -->
+  <div id="player-count">0 Spieler online</div>
+
   <!-- Kurze Steuerungs-Hilfe -->
   <div id="help">
     WASD = Laufen &nbsp;|&nbsp; Maus = Schauen &nbsp;|&nbsp; Klick = Schlagen &nbsp;|&nbsp; E = Beere essen
+  </div>
+
+  <!-- Start-Bildschirm: Name eingeben und beitreten -->
+  <div id="start-screen">
+    <h1>no-food 🍓</h1>
+    <p>Sammle Holz, Stein und Beeren — und überlebe gemeinsam mit den anderen!</p>
+    <input id="name-input" type="text" maxlength="16" placeholder="Dein Name" autocomplete="off">
+    <button id="start-btn" disabled>Spielen</button>
+    <p id="start-status">Verbinde mit dem Server …</p>
   </div>
 
   <!-- Todes-Bildschirm -->

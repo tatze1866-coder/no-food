@@ -1,0 +1,137 @@
+# AGENTS.md
+
+Dieser Leitfaden richtet sich an KI-Coding-Agenten, die im Projekt **no-food** arbeiten.
+
+## Projektübersicht
+
+**no-food** ist ein kleines 2D-Überlebensspiel im Browser, inspiriert von
+[Starve.io](https://starve.io). Der Spieler sammelt Ressourcen (Holz, Stein,
+Beeren), muss seinen Hunger stillen und so lange wie möglich überleben.
+Seit der Multiplayer-Umstellung spielen alle Spieler **gemeinsam in derselben
+Welt** über das Internet.
+
+Es ist bewusst ein **Lern-/Hobbyprojekt mit minimalem Tooling**: kein
+Build-Schritt, keine Frameworks, genau **eine** npm-Abhängigkeit (`ws` für
+WebSockets). Der Browser-Code läuft weiterhin direkt als klassisches
+`<script>`-Tag, der Server ist eine einzige Node.js-Datei.
+
+## Technologie-Stack
+
+- **Server:** Node.js (≥ 18) mit der Bibliothek `ws`. `server.js` macht beides:
+  statischer Dateiserver (mit Bordmitteln `http`/`fs`, kein Express) **und**
+  WebSocket-Spielserver auf demselben Port (`PORT`, Standard 3000).
+- **Client:** Reines HTML5, CSS3 und Vanilla-JavaScript (ES6+, als klassisches
+  `<script>`-Tag eingebunden — **keine ES-Module**, alles im globalen Scope).
+- Rendering über die **Canvas 2D API** (`<canvas id="game">`).
+- Spiel-Schleife im Browser über `requestAnimationFrame` (nur noch Anzeige:
+  Interpolation, Kamera, HUD); die eigentliche Logik läuft im **Server-Tick**
+  (20×/Sekunde, `setInterval` mit festem `dt`).
+- **Der Server ist der „Chef" (autoritativ):** Welt-Erzeugung, Bewegung,
+  Hunger/Leben, Schlagen und Beeren-Nachwachsen leben ausschließlich in
+  `server.js`. Der Client schickt Eingaben (`join`, `input`, `hit`, `eat`,
+  `respawn`) und zeichnet den Spielstand aus den `state`-Nachrichten.
+- HUD (Inventar, Lebens-/Hungerbalken, Start- und Todes-Bildschirm) ist
+  normales DOM und wird per `document.getElementById` aktualisiert.
+- Einzige Abhängigkeit: `ws` (siehe `package.json`). Keine weiteren Pakete
+  hinzufügen, wenn es mit Bordmitteln geht.
+
+## Bauen und Starten
+
+```bash
+npm install   # einmalig
+npm start     # node server.js, läuft auf Port 3000 (PORT änderbar)
+```
+
+- **Spielen/Testen:** `http://localhost:3000` im Browser öffnen (ggf. in zwei
+  Fenstern, um Multiplayer zu sehen).
+- **Nach einer Server-Änderung:** Server neu starten. **Nach einer
+  Client-Änderung** (`index.html`, `style.css`, `js/game.js`): Seite neu laden.
+- Das Öffnen von `index.html` per Doppelklick (`file://`) funktioniert **nicht
+  mehr** — der Client braucht die WebSocket-Verbindung zum Server.
+
+## Projektstruktur
+
+```
+no-food/
+├── index.html    # Spielseite: Canvas + HUD (Inventar, Balken, Hilfe, Start-/Todes-Bildschirm)
+├── style.css     # Aussehen des HUD und der Anzeige-Elemente (kein Spiel-Rendering)
+├── js/
+│   └── game.js   # Browser-Client: Eingabe, Netzwerk, Zeichnen (eine Datei, keine Module)
+├── server.js     # Server: statische Dateien + autoritative Spiel-Logik + WebSocket-Protokoll
+├── package.json  # npm start + einzige Abhängigkeit (ws)
+└── .gitignore    # node_modules/
+```
+
+`server.js` und `js/game.js` sind beide in nummerierte Abschnitte gegliedert
+(siehe Kopfkommentare der Dateien). Das **Netzwerk-Protokoll** (JSON-Nachrichten
+mit Feld `t`) ist im Kopf von Abschnitt 7 in `server.js` dokumentiert; die
+Client-Seite dazu steht in Abschnitt 4 von `js/game.js`. Beide Seiten müssen
+bei Änderungen synchron gehalten werden.
+
+## Konventionen und Code-Stil
+
+- **Sprache: Deutsch.** Kommentare, UI-Texte und Dokumentation sind auf Deutsch
+  und sollen es bleiben. Code-Bezeichner sind Englisch (`player`, `tryHit`,
+  `updateHUD`).
+- **Zielgruppe: Programmier-Anfänger.** Die Kommentare erklären bewusst viel
+  und einfach — diesen didaktischen Stil beibehalten, keinen Code
+  „verschlimmbessern" (keine Frameworks, kein Build-Setup, keine
+  Build-Artefakte).
+- Alle **Spielwerte gehören in `CONFIG`** (oben in `server.js`), nicht als
+  Magic Numbers im restlichen Code. Der Client bekommt die für die Anzeige
+  nötigen Werte per `welcome`-Nachricht vom Server. Ausnahme: Schwellwert `70`
+  für die Regeneration und `+ 20` Toleranz beim Treffer-Check in `tryHit()`
+  sind aktuell noch hart kodiert; die Beeren-Anzahl `4` beim Zeichnen der
+  Büsche im Client ebenfalls (entspricht `bushBerries`).
+- `game.js` (Client) und `server.js` sind bewusst **jeweils eine einzige Datei
+  ohne Module**. Neue Logik in den passenden nummerierten Abschnitt einordnen
+  und den Aufbau-Kommentar am Dateianfang bei größeren Änderungen aktualisieren.
+- **Spiel-Logik lebt auf dem Server.** Der Client darf nichts selbst rechnen,
+  was den Spielstand betrifft (Ausnahme: rein kosmetische Vorhersagen wie die
+  Wackel-Animation in `predictShake`). Neue Spielregeln gehören in den
+  Server-Tick, nicht in den Browser.
+- Einfache Funktionen und Plain Objects statt Klassen; globale Zustände
+  (`resources`, `players`, `camera`, `keys`, `mouse` im Client bzw.
+  `resources`, `players`, `sockets` im Server) sind der etablierte Stil.
+- Einrückung: 2 Leerzeichen. Ansonsten dem vorhandenen Stil der Datei folgen.
+- Zeitbasierte Logik immer über `dt` (Sekunden) rechnen, nie pro Frame/Tick
+  fest verdrahten.
+- **Spieler-Positionen im Client sanft bewegen (Lerp)**: Server-Snapshots
+  kommen 20×/s, gezeichnet wird 60×/s — Positionen nie hart setzen.
+
+## Testen
+
+Es gibt **keine Test-Suite und kein Test-Framework**. Verifikation erfolgt
+manuell im Browser:
+
+1. `npm start`, dann `http://localhost:3000` in **zwei Browserfenstern** öffnen,
+   Browser-Konsole auf Fehler prüfen.
+2. Kernabläufe durchspielen: Beitreten mit Namen, Laufen (WASD/Pfeiltasten),
+   Schlagen/Sammeln (Linksklick auf Baum/Stein/Strauch), Beere essen (E),
+   Verhungern bis zum Todes-Bildschirm, Neustart über den Button.
+3. Multiplayer prüfen: beide Fenster sehen die Figur des anderen mit Namen,
+   Beerenstände der Büsche sind in beiden Fenstern gleich, ein geschlossenes
+   Fenster lässt die Figur im anderen verschwinden.
+
+## Deployment
+
+„Deployment" heißt: Repo auf einen Server mit Node.js ≥ 18 klonen,
+`npm install`, `npm start`, Port 3000 freigeben (oder Reverse Proxy mit
+WebSocket-Support davor — nginx-Beispiel im README). Es gibt keinen
+CI/CD-Prozess.
+
+## Sicherheit und sonstige Hinweise
+
+- Der statische Dateiserver liefert **nur** die fest eingetragenen drei Dateien
+  aus (`FILES`-Liste in `server.js`) — bei neuen Client-Dateien die Liste
+  erweitern, niemals beliebige Pfade durchreichen.
+- WebSocket-Nachrichten sind auf 16 KB begrenzt (`maxPayload`) und werden
+  serverseitig validiert (Booleans/Zahlen geprüft, Namen auf 16 Zeichen
+  gekürzt). Schläge sind serverseitig per `hitCooldown` begrenzt.
+- Beim Ändern der HUD-Elemente in `index.html` darauf achten, dass die IDs
+  (`inv-wood`, `inv-stone`, `inv-berry`, `health-fill`, `hunger-fill`,
+  `survival-time`, `death-screen`, `restart-btn`, `player-count`,
+  `start-screen`, `name-input`, `start-btn`, `start-status`) mit den Zugriffen
+  in `js/game.js` übereinstimmen.
+- Geplante Features (siehe README.md): Crafting, Werkzeuge, Tag/Nacht-Wechsel,
+  Tiere. Multiplayer ist umgesetzt.

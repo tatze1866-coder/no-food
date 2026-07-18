@@ -1,37 +1,32 @@
 // ============================================================
-// no-food — ein Überlebensspiel im Stil von Starve.io
+// no-food — Browser-Client (Eingabe + Zeichnen)
 // ------------------------------------------------------------
+// Der Server (server.js) ist der „Chef" über das Spiel: Er rechnet
+// Bewegung, Hunger und Schläge. Diese Datei hier schickt nur die
+// Eingaben des Spielers zum Server und zeichnet den Spielstand,
+// der zurückkommt (für ALLE Spieler in derselben Welt).
+//
 // Aufbau dieser Datei:
-//   1. Einstellungen (alle Spielwerte zum leichten Anpassen)
+//   1. Einstellungen (Anzeige-Werte, kommen beim Beitritt vom Server)
 //   2. Hilfsfunktionen
 //   3. Eingabe (Tastatur + Maus)
-//   4. Welt (Bäume, Steine, Büsche)
-//   5. Spieler
-//   6. Spiel-Logik (Update)
+//   4. Netzwerk (WebSocket: senden und empfangen)
+//   5. Spielstand (Welt + Spieler, wie der Server sie meldet)
+//   6. Spiel-Logik (Update: sanfte Bewegung, Kamera, Anzeige)
 //   7. Zeichnen (Render)
 //   8. Spiel-Schleife
 // ============================================================
 
 // ---------- 1. EINSTELLUNGEN ----------
+// Startwerte für die Anzeige. Beim Beitritt ("welcome") schickt der
+// Server die echten Werte — damit Server und Browser immer gleich sind.
 const CONFIG = {
-  worldSize: 4000,        // Breite/Höhe der Welt in Pixeln
-  playerSpeed: 240,       // Bewegungsgeschwindigkeit (Pixel pro Sekunde)
-  playerRadius: 24,       // Größe des Spielers
-  reach: 65,              // Wie weit der Spieler schlagen kann
-  hitCooldown: 0.4,       // Sekunden zwischen zwei Schlägen
-
+  worldSize: 4000,
+  playerRadius: 24,
+  reach: 65,
+  hitCooldown: 0.4,
   maxHealth: 100,
   maxHunger: 100,
-  hungerDrain: 1.6,       // Hunger-Verlust pro Sekunde
-  starveDamage: 4,        // Schaden pro Sekunde wenn Hunger auf 0
-  regenRate: 3,           // Heilung pro Sekunde wenn Hunger über 70
-  berryFood: 22,          // Wieviel Hunger eine Beere stillt
-
-  treeCount: 90,          // Anzahl Bäume in der Welt
-  rockCount: 45,          // Anzahl Steine
-  bushCount: 55,          // Anzahl Beerensträucher
-  bushBerries: 4,         // Beeren pro Strauch
-  berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
 };
 
 // ---------- 2. HILFSFUNKTIONEN ----------
@@ -45,16 +40,6 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-// Zufallszahl zwischen min und max
-function rand(min, max) {
-  return min + Math.random() * (max - min);
-}
-
-// Abstand zwischen zwei Punkten
-function dist(x1, y1, x2, y2) {
-  return Math.hypot(x2 - x1, y2 - y1);
-}
-
 // Wert zwischen min und max begrenzen
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -66,7 +51,7 @@ const mouse = { x: 0, y: 0, down: false };
 
 window.addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
-  if (e.key.toLowerCase() === "e") eatBerry();
+  if (e.key.toLowerCase() === "e") sendMessage({ t: "eat" });
 });
 window.addEventListener("keyup", (e) => {
   keys[e.key.toLowerCase()] = false;
@@ -78,207 +63,241 @@ canvas.addEventListener("mousemove", (e) => {
 canvas.addEventListener("mousedown", () => { mouse.down = true; });
 window.addEventListener("mouseup", () => { mouse.down = false; });
 
-// ---------- 4. WELT ----------
-// Jede Ressource ist ein Objekt mit Position, Typ und Größe.
+// Aus den gedrückten Tasten die vier Richtungen ableiten
+function currentInput() {
+  return {
+    up: keys["w"] === true || keys["arrowup"] === true,
+    down: keys["s"] === true || keys["arrowdown"] === true,
+    left: keys["a"] === true || keys["arrowleft"] === true,
+    right: keys["d"] === true || keys["arrowright"] === true,
+  };
+}
+
+// ---------- 4. NETZWERK ----------
+// Nachrichten sind kleine JSON-Objekte. Das Feld "t" sagt, was gemeint ist
+// (die gleiche Liste steht oben in server.js — beide müssen zusammenpassen!).
+//
+// Browser -> Server:  join, input, hit, eat, respawn
+// Server -> Browser:  welcome, state, playerLeft
+
+let ws = null;
+let joined = false;       // Sind wir im Spiel (welcome erhalten)?
+let myId = null;          // Unsere Spieler-Nummer vom Server
+
+// Bei HTTPS muss die gesicherte Variante wss:// verwendet werden
+const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+ws = new WebSocket(wsProtocol + "://" + location.host);
+
+// Eine Nachricht zum Server schicken (nur wenn die Verbindung offen ist)
+function sendMessage(message) {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(message));
+  }
+}
+
+ws.addEventListener("open", () => {
+  document.getElementById("start-status").textContent = "Verbunden — bereit!";
+  document.getElementById("start-btn").disabled = false;
+});
+
+ws.addEventListener("message", (event) => {
+  let msg;
+  try {
+    msg = JSON.parse(event.data);
+  } catch (err) {
+    return; // Unverständliche Nachricht einfach ignorieren
+  }
+
+  if (msg.t === "welcome") {
+    // Beitritt bestätigt: eigene Nummer, echte Einstellungen und die Welt
+    myId = msg.id;
+    Object.assign(CONFIG, msg.config);
+    resources = msg.world;
+    for (const res of resources) res.shake = 0; // Wackel-Animation
+    joined = true;
+    document.getElementById("start-screen").classList.add("hidden");
+  } else if (msg.t === "state") {
+    applyState(msg);
+  } else if (msg.t === "playerLeft") {
+    players.delete(msg.id);
+  }
+});
+
+ws.addEventListener("close", () => {
+  joined = false;
+  const status = document.getElementById("start-status");
+  status.textContent = "Verbindung verloren — bitte Seite neu laden (F5).";
+  document.getElementById("start-btn").disabled = true;
+  document.getElementById("start-screen").classList.remove("hidden");
+});
+
+// Der „Spielen"-Knopf: Name schicken und beitreten
+document.getElementById("start-btn").addEventListener("click", () => {
+  const name = document.getElementById("name-input").value;
+  sendMessage({ t: "join", name: name });
+});
+
+// Der „Nochmal spielen"-Knopf auf dem Todes-Bildschirm
+document.getElementById("restart-btn").addEventListener("click", () => {
+  sendMessage({ t: "respawn" });
+});
+
+// 15-mal pro Sekunde die aktuellen Tasten + Blickrichtung zum Server schicken
+setInterval(() => {
+  if (!joined) return;
+  const input = currentInput();
+  sendMessage({
+    t: "input",
+    up: input.up,
+    down: input.down,
+    left: input.left,
+    right: input.right,
+    angle: ownAngle(),
+  });
+}, 1000 / 15);
+
+// Blickrichtung: von unserer Figur zur Maus (auf dem Bildschirm)
+function ownAngle() {
+  const me = players.get(myId);
+  if (!me) return 0;
+  const screenX = me.x - camera.x;
+  const screenY = me.y - camera.y;
+  return Math.atan2(mouse.y - screenY, mouse.x - screenX);
+}
+
+// ---------- 5. SPIELSTAND ----------
+// Die Welt und die Spieler, so wie der Server sie zuletzt gemeldet hat.
+// Jeder Spieler hat zusätzlich x/y (weich bewegte Anzeige-Position) und
+// tx/ty (Ziel-Position vom Server).
 let resources = [];
+const players = new Map();
 
-function createWorld() {
-  resources = [];
+// Kamera folgt der eigenen Figur
+const camera = { x: 0, y: 0 };
 
-  // Bäume
-  for (let i = 0; i < CONFIG.treeCount; i++) {
-    resources.push({
-      type: "tree",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
-      radius: rand(38, 55),
-      shake: 0, // Wackel-Animation beim Treffer
-    });
+// Lokale Anzeige-Zustände
+let punchAnim = 0;        // Animations-Fortschritt des eigenen Schlags (0 bis 1)
+let localHitTimer = 0;    // Sperre, damit Schläge nicht gespammt werden
+let deathShown = false;   // Ist der Todes-Bildschirm gerade sichtbar?
+
+// Neuen Spielstand vom Server übernehmen
+function applyState(msg) {
+  for (const p of msg.players) {
+    let entry = players.get(p.id);
+    if (!entry) {
+      // Neuer Spieler: startet direkt an der gemeldeten Position
+      entry = { x: p.x, y: p.y, tx: p.x, ty: p.y };
+      players.set(p.id, entry);
+    }
+    // Ziel-Position und alle anderen Werte übernehmen
+    entry.tx = p.x;
+    entry.ty = p.y;
+    entry.name = p.name;
+    entry.angle = p.angle;
+    entry.health = p.health;
+    entry.hunger = p.hunger;
+    entry.wood = p.wood;
+    entry.stone = p.stone;
+    entry.berries = p.berries;
+    entry.dead = p.dead;
+    entry.survivalTime = p.survivalTime;
   }
 
-  // Steine
-  for (let i = 0; i < CONFIG.rockCount; i++) {
-    resources.push({
-      type: "rock",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
-      radius: rand(26, 38),
-      shake: 0,
-    });
-  }
-
-  // Beerensträucher
-  for (let i = 0; i < CONFIG.bushCount; i++) {
-    resources.push({
-      type: "bush",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
-      radius: rand(22, 30),
-      berries: CONFIG.bushBerries,
-      regrowTimer: 0,
-      shake: 0,
-    });
-  }
-}
-
-// ---------- 5. SPIELER ----------
-const player = {
-  x: 0,
-  y: 0,
-  angle: 0,           // Blickrichtung (zur Maus)
-  health: CONFIG.maxHealth,
-  hunger: CONFIG.maxHunger,
-  wood: 0,
-  stone: 0,
-  berries: 0,
-  hitTimer: 0,        // Zeit bis zum nächsten möglichen Schlag
-  punchAnim: 0,       // Animations-Fortschritt des Schlags (0 bis 1)
-  dead: false,
-  survivalTime: 0,    // Wie lange der Spieler schon lebt (Sekunden)
-};
-
-function resetPlayer() {
-  player.x = CONFIG.worldSize / 2;
-  player.y = CONFIG.worldSize / 2;
-  player.health = CONFIG.maxHealth;
-  player.hunger = CONFIG.maxHunger;
-  player.wood = 0;
-  player.stone = 0;
-  player.berries = 0;
-  player.hitTimer = 0;
-  player.punchAnim = 0;
-  player.dead = false;
-  player.survivalTime = 0;
-}
-
-// Eine Beere aus dem Inventar essen
-function eatBerry() {
-  if (player.dead) return;
-  if (player.berries > 0 && player.hunger < CONFIG.maxHunger) {
-    player.berries--;
-    player.hunger = clamp(player.hunger + CONFIG.berryFood, 0, CONFIG.maxHunger);
+  // Geänderte Büsche: neue Beeren-Zahl + kurz wackeln
+  for (const [index, berries] of msg.bushes) {
+    if (resources[index]) {
+      resources[index].berries = berries;
+      resources[index].shake = 1;
+    }
   }
 }
 
 // ---------- 6. SPIEL-LOGIK ----------
-// Die Kamera folgt dem Spieler
-const camera = { x: 0, y: 0 };
-
 function update(dt) {
-  if (player.dead) return;
+  if (!joined) return;
 
-  player.survivalTime += dt;
+  const me = players.get(myId);
 
-  // --- Bewegung ---
-  let dx = 0, dy = 0;
-  if (keys["w"] || keys["arrowup"]) dy -= 1;
-  if (keys["s"] || keys["arrowdown"]) dy += 1;
-  if (keys["a"] || keys["arrowleft"]) dx -= 1;
-  if (keys["d"] || keys["arrowright"]) dx += 1;
+  // --- Schlagen (Taste halten schlägt wiederholt zu) ---
+  localHitTimer = Math.max(0, localHitTimer - dt);
+  punchAnim = Math.max(0, punchAnim - dt / CONFIG.hitCooldown);
 
-  // Diagonal nicht schneller laufen
-  if (dx !== 0 && dy !== 0) {
-    dx *= 0.7071;
-    dy *= 0.7071;
+  if (mouse.down && localHitTimer <= 0 && me && !me.dead) {
+    localHitTimer = CONFIG.hitCooldown;
+    punchAnim = 1;
+    sendMessage({ t: "hit" });
+    predictShake(me);
   }
 
-  player.x += dx * CONFIG.playerSpeed * dt;
-  player.y += dy * CONFIG.playerSpeed * dt;
-
-  // Nicht aus der Welt herauslaufen
-  player.x = clamp(player.x, CONFIG.playerRadius, CONFIG.worldSize - CONFIG.playerRadius);
-  player.y = clamp(player.y, CONFIG.playerRadius, CONFIG.worldSize - CONFIG.playerRadius);
-
-  // --- Blickrichtung zur Maus ---
-  const screenX = player.x - camera.x;
-  const screenY = player.y - camera.y;
-  player.angle = Math.atan2(mouse.y - screenY, mouse.x - screenX);
-
-  // --- Schlagen ---
-  player.hitTimer = Math.max(0, player.hitTimer - dt);
-  player.punchAnim = Math.max(0, player.punchAnim - dt / CONFIG.hitCooldown);
-
-  if (mouse.down && player.hitTimer <= 0) {
-    player.hitTimer = CONFIG.hitCooldown;
-    player.punchAnim = 1;
-    tryHit();
+  // --- Alle Figuren sanft auf ihre Ziel-Position bewegen ---
+  // (Der Server schickt 20 Positionen pro Sekunde, der Bildschirm
+  // zeichnet 60-mal pro Sekunde — dazwischen wird weich bewegt.)
+  for (const p of players.values()) {
+    const schritt = Math.min(1, dt * 12);
+    p.x += (p.tx - p.x) * schritt;
+    p.y += (p.ty - p.y) * schritt;
   }
 
-  // --- Hunger und Leben ---
-  player.hunger = clamp(player.hunger - CONFIG.hungerDrain * dt, 0, CONFIG.maxHunger);
-
-  if (player.hunger <= 0) {
-    // Verhungern: Leben sinkt
-    player.health -= CONFIG.starveDamage * dt;
-  } else if (player.hunger > 70) {
-    // Gut genährt: Leben regeneriert langsam
-    player.health = clamp(player.health + CONFIG.regenRate * dt, 0, CONFIG.maxHealth);
-  }
-
-  if (player.health <= 0) {
-    player.health = 0;
-    die();
-  }
-
-  // --- Ressourcen aktualisieren (Beeren wachsen nach, Wackeln abklingen) ---
+  // --- Wackel-Animation der Ressourcen abklingen lassen ---
   for (const res of resources) {
     res.shake = Math.max(0, res.shake - dt * 3);
-    if (res.type === "bush" && res.berries < CONFIG.bushBerries) {
-      res.regrowTimer += dt;
-      if (res.regrowTimer >= CONFIG.berryRegrow) {
-        res.regrowTimer = 0;
-        res.berries++;
-      }
-    }
   }
 
-  // --- Kamera folgt dem Spieler ---
-  camera.x = clamp(player.x - canvas.width / 2, 0, CONFIG.worldSize - canvas.width);
-  camera.y = clamp(player.y - canvas.height / 2, 0, CONFIG.worldSize - canvas.height);
+  // --- Kamera folgt der eigenen Figur ---
+  if (me) {
+    camera.x = clamp(me.x - canvas.width / 2, 0, CONFIG.worldSize - canvas.width);
+    camera.y = clamp(me.y - canvas.height / 2, 0, CONFIG.worldSize - canvas.height);
+  }
+
+  updateHUD(me);
+  updateDeathScreen(me);
 }
 
-// Prüfen ob der Schlag eine Ressource trifft
-function tryHit() {
-  // Der Treffer-Punkt liegt vor dem Spieler (in Blickrichtung)
-  const hitX = player.x + Math.cos(player.angle) * CONFIG.reach;
-  const hitY = player.y + Math.sin(player.angle) * CONFIG.reach;
+// Wackel-Animation beim eigenen Schlag sofort anzeigen, ohne auf den
+// Server zu warten (sucht wie der Server die nächste Ressource).
+function predictShake(me) {
+  const hitX = me.x + Math.cos(ownAngle()) * CONFIG.reach;
+  const hitY = me.y + Math.sin(ownAngle()) * CONFIG.reach;
 
-  // Die nächste Ressource in Reichweite finden
   let closest = null;
   let closestDist = Infinity;
   for (const res of resources) {
-    const d = dist(hitX, hitY, res.x, res.y);
+    const d = Math.hypot(hitX - res.x, hitY - res.y);
     if (d < res.radius + 20 && d < closestDist) {
       closest = res;
       closestDist = d;
     }
   }
+  if (closest) closest.shake = 1;
+}
 
-  if (!closest) return;
+// Anzeige (Inventar + Balken + Spielerzahl) aktualisieren
+function updateHUD(me) {
+  if (me) {
+    document.getElementById("inv-wood").textContent = me.wood;
+    document.getElementById("inv-stone").textContent = me.stone;
+    document.getElementById("inv-berry").textContent = me.berries;
 
-  closest.shake = 1; // Wackel-Animation starten
+    const healthPct = (me.health / CONFIG.maxHealth) * 100;
+    const hungerPct = (me.hunger / CONFIG.maxHunger) * 100;
+    document.getElementById("health-fill").style.width = healthPct + "%";
+    document.getElementById("hunger-fill").style.width = hungerPct + "%";
+  }
+  document.getElementById("player-count").textContent = players.size + " Spieler online";
+}
 
-  if (closest.type === "tree") {
-    player.wood++;
-  } else if (closest.type === "rock") {
-    player.stone++;
-  } else if (closest.type === "bush" && closest.berries > 0) {
-    closest.berries--;
-    player.berries++;
+// Todes-Bildschirm ein-/ausblenden (der Server entscheidet über dead)
+function updateDeathScreen(me) {
+  if (!me) return;
+  if (me.dead && !deathShown) {
+    deathShown = true;
+    document.getElementById("survival-time").textContent = me.survivalTime;
+    document.getElementById("death-screen").classList.remove("hidden");
+  } else if (!me.dead && deathShown) {
+    deathShown = false;
+    document.getElementById("death-screen").classList.add("hidden");
   }
 }
-
-function die() {
-  player.dead = true;
-  document.getElementById("survival-time").textContent = Math.floor(player.survivalTime);
-  document.getElementById("death-screen").classList.remove("hidden");
-}
-
-document.getElementById("restart-btn").addEventListener("click", () => {
-  document.getElementById("death-screen").classList.add("hidden");
-  createWorld();
-  resetPlayer();
-});
 
 // ---------- 7. ZEICHNEN ----------
 function render() {
@@ -294,20 +313,18 @@ function render() {
 
   // Ressourcen und Spieler nach Y-Position sortieren,
   // damit weiter unten stehende Dinge "davor" gezeichnet werden
-  const drawList = [...resources, player];
+  const drawList = [...resources, ...players.values()];
   drawList.sort((a, b) => a.y - b.y);
 
   for (const obj of drawList) {
-    if (obj === player) {
-      drawPlayer();
+    if (obj.name !== undefined) {
+      drawPlayer(obj);
     } else {
       drawResource(obj);
     }
   }
 
   ctx.restore();
-
-  updateHUD();
 }
 
 // Leichtes Gitter, damit man die Bewegung sieht
@@ -384,7 +401,7 @@ function drawResource(res) {
     ctx.stroke();
     // Beeren als kleine rote Punkte
     for (let i = 0; i < res.berries; i++) {
-      const angle = (i / CONFIG.bushBerries) * Math.PI * 2 + 0.5;
+      const angle = (i / 4) * Math.PI * 2 + 0.5;
       const bx = x + Math.cos(angle) * res.radius * 0.5;
       const by = y + Math.sin(angle) * res.radius * 0.5;
       ctx.fillStyle = "#e53935";
@@ -395,15 +412,19 @@ function drawResource(res) {
   }
 }
 
-function drawPlayer() {
+function drawPlayer(p) {
   const r = CONFIG.playerRadius;
 
-  // Beim Schlagen schnellt die Hand nach vorne
-  const punch = Math.sin(player.punchAnim * Math.PI) * 22;
-
   ctx.save();
-  ctx.translate(player.x, player.y);
-  ctx.rotate(player.angle);
+
+  // Tote Figuren werden durchscheinend gezeichnet
+  if (p.dead) ctx.globalAlpha = 0.4;
+
+  // Beim eigenen Schlagen schnellt die Hand nach vorne
+  const punch = p.id === myId ? Math.sin(punchAnim * Math.PI) * 22 : 0;
+
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.angle || 0);
 
   // Hände (zwei kleine Kreise vorne)
   ctx.fillStyle = "#e0ac69";
@@ -431,22 +452,22 @@ function drawPlayer() {
   ctx.stroke();
 
   ctx.restore();
-}
 
-// Anzeige (Inventar + Balken) aktualisieren
-function updateHUD() {
-  document.getElementById("inv-wood").textContent = player.wood;
-  document.getElementById("inv-stone").textContent = player.stone;
-  document.getElementById("inv-berry").textContent = player.berries;
-
-  const healthPct = (player.health / CONFIG.maxHealth) * 100;
-  const hungerPct = (player.hunger / CONFIG.maxHunger) * 100;
-  document.getElementById("health-fill").style.width = healthPct + "%";
-  document.getElementById("hunger-fill").style.width = hungerPct + "%";
+  // Name über dem Kopf
+  ctx.save();
+  if (p.dead) ctx.globalAlpha = 0.4;
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.strokeText(p.name, p.x, p.y - r - 12);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(p.name, p.x, p.y - r - 12);
+  ctx.restore();
 }
 
 // ---------- 8. SPIEL-SCHLEIFE ----------
-// Läuft ca. 60x pro Sekunde: erst Logik aktualisieren, dann zeichnen
+// Läuft ca. 60x pro Sekunde: erst Anzeige aktualisieren, dann zeichnen
 let lastTime = performance.now();
 
 function gameLoop(now) {
@@ -460,7 +481,5 @@ function gameLoop(now) {
   requestAnimationFrame(gameLoop);
 }
 
-// Spiel starten
-createWorld();
-resetPlayer();
+// Spiel starten (zeichnen sofort, gespielt wird nach dem Beitritt)
 requestAnimationFrame(gameLoop);
