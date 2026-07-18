@@ -932,10 +932,10 @@ function drawStructure(s) {
 }
 
 // Jede Art hat ihre eigene Sprite-Größe (Vielfaches des Kollisionsradius).
-// rabbit/wolf/spider: alte, hochformatige Sprites mit viel Rand oben/unten.
-// arcticFox/polarBear/mammoth: neue, eng zugeschnittene quadratische Sprites.
+// Alle sechs Sprites sind mittlerweile eng zugeschnittene quadratische Icons
+// im selben roten Konturen-Stil (wie im Wiki).
 const SPRITE_SCALE = {
-  rabbit: 8.5, wolf: 13, spider: 26,
+  rabbit: 8.5, wolf: 7.5, spider: 8.5,
   arcticFox: 7.5, polarBear: 7.5, mammoth: 3.1,
 };
 
