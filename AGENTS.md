@@ -15,7 +15,8 @@ Build-Schritt, keine Frameworks, genau **eine** npm-Abhängigkeit (`ws` für
 WebSockets). Der Browser-Code läuft weiterhin direkt als klassisches
 `<script>`-Tag, der Server ist eine einzige Node.js-Datei.
 
-Die Welt ist eine kleine Karte (2400×2400) mit drei **Biomen**: oben komplett
+Die Welt ist eine große Karte (36000×36000, Kantenlänge 15× die ursprünglichen
+2400) mit drei **Biomen**: oben komplett
 **Schnee**, unten links **Wald** (Anfänger-Biom, hier starten die Spieler) und
 unten rechts **Ozean** (nicht begehbar — der Server blockt die Bewegung am
 Ufer). Die Biome sind in `server.js` als `BIOMES`-Rechtecke definiert, die

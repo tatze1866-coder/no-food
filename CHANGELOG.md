@@ -5,6 +5,10 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 ## Unveröffentlicht (Branch `kimi`)
 
 ### Geändert
+- **Karte stark vergrößert**: von 2400×2400 auf **36000×36000** (15× Kantenlänge).
+  Ressourcen 15× so viele (die Welt bleibt bewachsen, aber weitläufiger), Tiere
+  4× so viele (32 Hasen, 20 Spinnen, 16 Wölfe, 12 Eisbären — mehr geht nicht,
+  weil Tiere 20×/s übers Netz geschickt werden).
 - **Tiere sind langsamer** (alle deutlich unter dem Spieler-Tempo 240: Hase 170,
   Spinne 180, Wolf 200, Eisbär 180) und bewegen sich **ruckweise** —
   Ruck–Stopp–Ruck–Stopp (`animalMoveTime`/`animalPauseTime` in `CONFIG`,

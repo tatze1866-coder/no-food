@@ -24,7 +24,7 @@ const { WebSocketServer } = require("ws");
 
 // ---------- 1. EINSTELLUNGEN ----------
 const CONFIG = {
-  worldSize: 2400,        // Breite/Höhe der Welt in Pixeln
+  worldSize: 36000,       // Breite/Höhe der Welt in Pixeln (15x die alte Kantenlänge)
   playerSpeed: 240,       // Bewegungsgeschwindigkeit (Pixel pro Sekunde)
   playerRadius: 24,       // Größe des Spielers
   reach: 65,              // Wie weit der Spieler schlagen kann
@@ -37,13 +37,15 @@ const CONFIG = {
   regenRate: 3,           // Heilung pro Sekunde wenn Hunger über 70
   berryFood: 22,          // Wieviel Hunger eine Beere stillt
 
-  // Ressourcen-Anzahl pro Biom (die Biome selbst stehen in Abschnitt 4)
-  forestTrees: 50,        // Bäume im Wald (Anfänger-Biom: viel Holz + Essen)
-  forestRocks: 12,        // Steine im Wald
-  forestBushes: 35,       // Beerensträucher im Wald
-  snowTrees: 25,          // Bäume im Schnee (karger, dafür mehr Steine)
-  snowRocks: 25,          // Steine im Schnee
-  snowBushes: 10,         // Beerensträucher im Schnee
+  // Ressourcen-Anzahl pro Biom (die Biome selbst stehen in Abschnitt 4).
+  // 15x die früheren Werte, passend zur 15x längeren Kartenkante —
+  // die Welt ist weitläufiger, aber nicht leer.
+  forestTrees: 750,       // Bäume im Wald (Anfänger-Biom: viel Holz + Essen)
+  forestRocks: 180,       // Steine im Wald
+  forestBushes: 525,      // Beerensträucher im Wald
+  snowTrees: 375,         // Bäume im Schnee (karger, dafür mehr Steine)
+  snowRocks: 375,         // Steine im Schnee
+  snowBushes: 150,        // Beerensträucher im Schnee
   // Der Ozean bekommt absichtlich keine Ressourcen.
 
   bushBerries: 4,         // Beeren pro Strauch
@@ -55,10 +57,12 @@ const CONFIG = {
 
   // Tiere (von Kimi)
   playerDamage: 20,       // Grundschaden des Spieler-Schlags gegen Tiere
-  rabbitCount: 8,         // Hasen im Wald (neutral, fliehen)
-  spiderCount: 5,         // Spinnen im Wald (nur NACHTS feindlich)
-  wolfCount: 4,           // Wölfe im Wald (immer feindlich)
-  bearCount: 3,           // Eisbären im Schnee (immer feindlich)
+  // Tiere nur 4x so viele wie früher (nicht 15x): Sie werden 20x pro Sekunde
+  // an alle Browser geschickt — zu viele würden das Netzwerk überlasten.
+  rabbitCount: 32,        // Hasen im Wald (neutral, fliehen)
+  spiderCount: 20,        // Spinnen im Wald (nur NACHTS feindlich)
+  wolfCount: 16,          // Wölfe im Wald (immer feindlich)
+  bearCount: 12,          // Eisbären im Schnee (immer feindlich)
   animalRespawn: 30,      // Sekunden bis ein getötetes Tier neu spawnt
   aggroRange: 260,        // Ab dieser Entfernung verfolgen feindliche Tiere
   fleeRange: 150,         // Ab dieser Entfernung fliehen Hasen vor Spielern

@@ -21,7 +21,7 @@
 // Startwerte für die Anzeige. Beim Beitritt ("welcome") schickt der
 // Server die echten Werte — damit Server und Browser immer gleich sind.
 const CONFIG = {
-  worldSize: 2400,
+  worldSize: 36000,
   playerRadius: 24,
   reach: 65,
   hitCooldown: 0.4,
