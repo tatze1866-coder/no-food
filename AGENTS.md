@@ -15,6 +15,14 @@ Build-Schritt, keine Frameworks, genau **eine** npm-Abhängigkeit (`ws` für
 WebSockets). Der Browser-Code läuft weiterhin direkt als klassisches
 `<script>`-Tag, der Server ist eine einzige Node.js-Datei.
 
+Die Welt ist eine kleine Karte (2400×2400) mit drei **Biomen**: oben komplett
+**Schnee**, unten links **Wald** (Anfänger-Biom, hier starten die Spieler) und
+unten rechts **Ozean** (nicht begehbar — der Server blockt die Bewegung am
+Ufer). Die Biome sind in `server.js` als `BIOMES`-Rechtecke definiert, die
+Ressourcen-Anzahlen pro Biom stehen in `CONFIG` (`forestTrees`, `snowRocks`
+usw.). Die Biom-Liste geht per `welcome`-Nachricht (`config.biomes`) an den
+Client, der sie nur als Farb-Rechtecke zeichnet.
+
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
 
 An diesem Projekt arbeiten **mehrere verschiedene KI-Assistenten** (Claude und

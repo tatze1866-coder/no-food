@@ -53,6 +53,9 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 
 ## Spielregeln
 
+- 🗺️ Die Karte hat drei **Biome**: **Wald** (unten links, hier startest du),
+  **Schnee** (oben — karg, aber mehr Steine) und **Ozean** (unten rechts —
+  nicht begehbar)
 - 🌳 **Bäume** schlagen gibt **Holz**
 - 🪨 **Steine** schlagen gibt **Stein**
 - 🍓 **Beerensträucher** schlagen gibt **Beeren** (wachsen nach!)

@@ -21,12 +21,13 @@
 // Startwerte für die Anzeige. Beim Beitritt ("welcome") schickt der
 // Server die echten Werte — damit Server und Browser immer gleich sind.
 const CONFIG = {
-  worldSize: 4000,
+  worldSize: 2400,
   playerRadius: 24,
   reach: 65,
   hitCooldown: 0.4,
   maxHealth: 100,
   maxHunger: 100,
+  biomes: [],   // Biom-Rechtecke inkl. Farbe — kommen beim Beitritt vom Server
 };
 
 // ---------- 2. HILFSFUNKTIONEN ----------
@@ -78,7 +79,7 @@ function currentInput() {
 // (die gleiche Liste steht oben in server.js — beide müssen zusammenpassen!).
 //
 // Browser -> Server:  join, input, hit, eat, respawn
-// Server -> Browser:  welcome, state, playerLeft
+// Server -> Browser:  welcome (inkl. Biome in config.biomes), state, playerLeft
 
 let ws = null;
 let joined = false;       // Sind wir im Spiel (welcome erhalten)?
@@ -301,9 +302,12 @@ function updateDeathScreen(me) {
 
 // ---------- 7. ZEICHNEN ----------
 function render() {
-  // Hintergrund (Gras)
-  ctx.fillStyle = "#4caf50";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Hintergrund: jedes Biom als Farb-Rechteck (die Liste kam vom Server).
+  // Die Kamera bleibt immer innerhalb der Welt, darum reicht das als Füllung.
+  for (const b of CONFIG.biomes) {
+    ctx.fillStyle = b.color;
+    ctx.fillRect(b.x - camera.x, b.y - camera.y, b.w, b.h);
+  }
 
   ctx.save();
   ctx.translate(-camera.x, -camera.y);

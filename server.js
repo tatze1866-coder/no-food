@@ -10,7 +10,7 @@
 //   1. Einstellungen (alle Spielwerte — wie früher im Browser)
 //   2. Hilfsfunktionen
 //   3. Statischer Dateiserver (liefert index.html, style.css, game.js)
-//   4. Welt (Bäume, Steine, Büsche)
+//   4. Welt (Biome + Bäume, Steine, Büsche)
 //   5. Spieler-Verwaltung (beitreten, verlassen, essen, respawn)
 //   6. Spiel-Logik (Tick: Bewegung, Schlagen, Hunger, Nachwachsen)
 //   7. Netzwerk (Nachrichten empfangen und an alle senden)
@@ -24,7 +24,7 @@ const { WebSocketServer } = require("ws");
 
 // ---------- 1. EINSTELLUNGEN ----------
 const CONFIG = {
-  worldSize: 4000,        // Breite/Höhe der Welt in Pixeln
+  worldSize: 2400,        // Breite/Höhe der Welt in Pixeln
   playerSpeed: 240,       // Bewegungsgeschwindigkeit (Pixel pro Sekunde)
   playerRadius: 24,       // Größe des Spielers
   reach: 65,              // Wie weit der Spieler schlagen kann
@@ -37,9 +37,15 @@ const CONFIG = {
   regenRate: 3,           // Heilung pro Sekunde wenn Hunger über 70
   berryFood: 22,          // Wieviel Hunger eine Beere stillt
 
-  treeCount: 90,          // Anzahl Bäume in der Welt
-  rockCount: 45,          // Anzahl Steine
-  bushCount: 55,          // Anzahl Beerensträucher
+  // Ressourcen-Anzahl pro Biom (die Biome selbst stehen in Abschnitt 4)
+  forestTrees: 50,        // Bäume im Wald (Anfänger-Biom: viel Holz + Essen)
+  forestRocks: 12,        // Steine im Wald
+  forestBushes: 35,       // Beerensträucher im Wald
+  snowTrees: 25,          // Bäume im Schnee (karger, dafür mehr Steine)
+  snowRocks: 25,          // Steine im Schnee
+  snowBushes: 10,         // Beerensträucher im Schnee
+  // Der Ozean bekommt absichtlich keine Ressourcen.
+
   bushBerries: 4,         // Beeren pro Strauch
   berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
 };
@@ -94,6 +100,43 @@ const server = http.createServer((req, res) => {
 });
 
 // ---------- 4. WELT ----------
+// Die Karte ist in Biome aufgeteilt (Rechtecke, die die Welt lückenlos
+// abdecken). y wächst nach UNTEN — „oben" heißt also kleine y-Werte:
+//   oben komplett:  Schnee (beide oberen Quadranten)
+//   unten links:    Wald (Anfänger-Biom, hier starten die Spieler)
+//   unten rechts:   Ozean (Wasser — darf nicht betreten werden)
+// Die Farbe schickt der Server beim Beitritt an die Browser zum Zeichnen.
+const half = CONFIG.worldSize / 2;
+const BIOMES = [
+  { name: "snow",   color: "#dfe9f2", x: 0,    y: 0,    w: CONFIG.worldSize, h: half },
+  { name: "forest", color: "#4caf50", x: 0,    y: half, w: half, h: half },
+  { name: "ocean",  color: "#1b6ca8", x: half, y: half, w: half, h: half },
+];
+
+// In welchem Biom liegt der Punkt (x, y)?
+function biomeAt(x, y) {
+  for (const biome of BIOMES) {
+    if (x >= biome.x && x < biome.x + biome.w && y >= biome.y && y < biome.y + biome.h) {
+      return biome;
+    }
+  }
+  return BIOMES[0]; // Außerhalb der Welt (sollte nicht vorkommen): Schnee
+}
+
+// Zufälliger Punkt in einem Biom, mit Abstand (margin) zum Biom-Rand
+function randInBiome(biome, margin) {
+  return {
+    x: rand(biome.x + margin, biome.x + biome.w - margin),
+    y: rand(biome.y + margin, biome.y + biome.h - margin),
+  };
+}
+
+// Startpunkt für (neu) beitretende Spieler: Mitte des Wald-Bioms (Anfänger)
+function spawnPoint() {
+  const forest = BIOMES.find((b) => b.name === "forest");
+  return { x: forest.x + forest.w / 2, y: forest.y + forest.h / 2 };
+}
+
 // Jede Ressource ist ein Objekt mit Position, Typ und Größe.
 // Die Position im Array ist gleichzeitig ihre Nummer (Index) —
 // darüber sagt der Server den Browsern, welcher Busch sich geändert hat.
@@ -102,32 +145,32 @@ let resources = [];
 function createWorld() {
   resources = [];
 
-  // Bäume
-  for (let i = 0; i < CONFIG.treeCount; i++) {
-    resources.push({
-      type: "tree",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
-      radius: rand(38, 55),
-    });
+  // Die beiden begehbaren Biome bekommen ihre eigenen Ressourcen
+  const forest = BIOMES.find((b) => b.name === "forest");
+  const snow = BIOMES.find((b) => b.name === "snow");
+
+  // Bäume (Wald + Schnee)
+  for (let i = 0; i < CONFIG.forestTrees + CONFIG.snowTrees; i++) {
+    const biome = i < CONFIG.forestTrees ? forest : snow;
+    const pos = randInBiome(biome, 60);
+    resources.push({ type: "tree", x: pos.x, y: pos.y, radius: rand(38, 55) });
   }
 
-  // Steine
-  for (let i = 0; i < CONFIG.rockCount; i++) {
-    resources.push({
-      type: "rock",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
-      radius: rand(26, 38),
-    });
+  // Steine (Wald + Schnee)
+  for (let i = 0; i < CONFIG.forestRocks + CONFIG.snowRocks; i++) {
+    const biome = i < CONFIG.forestRocks ? forest : snow;
+    const pos = randInBiome(biome, 60);
+    resources.push({ type: "rock", x: pos.x, y: pos.y, radius: rand(26, 38) });
   }
 
-  // Beerensträucher
-  for (let i = 0; i < CONFIG.bushCount; i++) {
+  // Beerensträucher (Wald + Schnee)
+  for (let i = 0; i < CONFIG.forestBushes + CONFIG.snowBushes; i++) {
+    const biome = i < CONFIG.forestBushes ? forest : snow;
+    const pos = randInBiome(biome, 60);
     resources.push({
       type: "bush",
-      x: rand(100, CONFIG.worldSize - 100),
-      y: rand(100, CONFIG.worldSize - 100),
+      x: pos.x,
+      y: pos.y,
       radius: rand(22, 30),
       berries: CONFIG.bushBerries,
       regrowTimer: 0,
@@ -155,11 +198,12 @@ let nextPlayerId = 1;
 const changedBushes = new Set();
 
 function addPlayer(id, name) {
+  const spawn = spawnPoint();
   players.set(id, {
     id: id,
     name: name,
-    x: CONFIG.worldSize / 2,
-    y: CONFIG.worldSize / 2,
+    x: spawn.x,
+    y: spawn.y,
     angle: 0,           // Blickrichtung (zur Maus)
     health: CONFIG.maxHealth,
     hunger: CONFIG.maxHunger,
@@ -175,8 +219,9 @@ function addPlayer(id, name) {
 
 // Nach dem Tod / bei „Nochmal spielen": Werte zurücksetzen
 function resetPlayer(player) {
-  player.x = CONFIG.worldSize / 2;
-  player.y = CONFIG.worldSize / 2;
+  const spawn = spawnPoint();
+  player.x = spawn.x;
+  player.y = spawn.y;
   player.health = CONFIG.maxHealth;
   player.hunger = CONFIG.maxHunger;
   player.wood = 0;
@@ -217,8 +262,14 @@ function update(dt) {
       dy *= 0.7071;
     }
 
-    player.x += dx * CONFIG.playerSpeed * dt;
-    player.y += dy * CONFIG.playerSpeed * dt;
+    // Bewegen — aber der Ozean darf nicht betreten werden.
+    // Die beiden Richtungen werden einzeln geprüft, damit der Spieler
+    // am Ufer entlang „rutscht" statt komplett stehen zu bleiben.
+    const nextX = player.x + dx * CONFIG.playerSpeed * dt;
+    if (biomeAt(nextX, player.y).name !== "ocean") player.x = nextX;
+
+    const nextY = player.y + dy * CONFIG.playerSpeed * dt;
+    if (biomeAt(player.x, nextY).name !== "ocean") player.y = nextY;
 
     // Nicht aus der Welt herauslaufen
     player.x = clamp(player.x, CONFIG.playerRadius, CONFIG.worldSize - CONFIG.playerRadius);
@@ -305,7 +356,8 @@ function tryHit(player) {
 //   { t: "respawn" }                        Nach dem Tod neu starten
 //
 // Server -> Browser:
-//   { t: "welcome", id, config, world }     Begrüßung: eigene Nummer + Welt
+//   { t: "welcome", id, config, world }     Begrüßung: eigene Nummer,
+//                                           Einstellungen (inkl. Biome in config.biomes) + Welt
 //   { t: "state", players, bushes }         Spielstand (TICKS_PER_SECOND-mal/s)
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
 
@@ -392,6 +444,7 @@ wss.on("connection", (ws) => {
           hitCooldown: CONFIG.hitCooldown,
           maxHealth: CONFIG.maxHealth,
           maxHunger: CONFIG.maxHunger,
+          biomes: BIOMES,   // Biom-Rechtecke inkl. Farbe (nur zum Zeichnen)
         },
         world: worldForClient(),
       });
