@@ -1961,6 +1961,7 @@ wss.on("connection", (ws) => {
           maxHealth: CONFIG.maxHealth,
           maxHunger: CONFIG.maxHunger,
           capacity: CONFIG.capacity,
+          campfireRadius: CONFIG.campfireRadius, // für den Licht-/Wärmekreis ums Lagerfeuer
           leaderboardSize: CONFIG.leaderboardSize,
           biomes: BIOMES,   // Biom-Rechtecke inkl. Farbe (zum Zeichnen + Minimap)
           rivers: RIVERS,   // Fluss-Linien inkl. Breite (zum Zeichnen)

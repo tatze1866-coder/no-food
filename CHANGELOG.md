@@ -2,6 +2,21 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-19 — Crafting-HUD-Sortierung + Lagerfeuer-Lichtkreis (Branch `main`)
+
+### Geändert
+- **Bau-Menü sortiert baubare Rezepte nach oben**: Rezepte, deren Kosten das
+  aktuelle Inventar deckt, rücken automatisch an die erste Stelle der Liste
+  (per CSS `order` auf dem Flex-Grid `#recipe-list`), nicht baubare Rezepte
+  rutschen nach unten. Sortierung aktualisiert sich live in
+  `refreshRecipeMenu()`, sobald sich das Inventar ändert.
+- **Lagerfeuer haben jetzt einen sichtbaren Wärme-/Lichtradius**: ein weicher
+  gelber Schein (Radial-Gradient, `drawCampfireGlow()` in `js/game.js`) zeigt
+  genau den Bereich, in dem man Heilung und Wärme bekommt — deckungsgleich mit
+  `CONFIG.campfireRadius` (130px), das jetzt auch über die `welcome`-Nachricht
+  an den Client übertragen wird. Der Schein flackert leicht (wie die Flamme)
+  und schrumpft mit sinkendem Brennstoff (`fuelPct`).
+
 ## 2026-07-19 — Klein/groß-Vorkommen + begrenzter Vorrat für alle Ressourcen (Branch `main`)
 
 ### Geändert

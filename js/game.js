@@ -705,6 +705,9 @@ function refreshRecipeMenu(me) {
     }
     costEl.innerHTML = parts.join(" &nbsp; ");
     row.classList.toggle("disabled", !affordable);
+    // Baubare Rezepte per Flexbox-Order nach oben rücken (DOM-Reihenfolge
+    // bleibt gleich, nur die Anzeige-Position ändert sich)
+    row.style.order = affordable ? "0" : "1";
   }
 }
 
@@ -736,6 +739,13 @@ function render() {
   drawGrid();
   drawRivers();
   drawWorldBorder();
+
+  // Warm-/Licht-Schein um jedes brennende Lagerfeuer, BEVOR die Objekte
+  // gezeichnet werden — zeigt genau den Radius, in dem man Wärme + Heilung
+  // bekommt (CONFIG.campfireRadius, serverseitig identisch für nearCampfire).
+  for (const s of structures) {
+    if (s.type === "campfire" && s.fuelPct > 0) drawCampfireGlow(s);
+  }
 
   // Ressourcen, Lagerfeuer, Tiere und Spieler nach Y-Position sortieren,
   // damit weiter unten stehende Dinge "davor" gezeichnet werden
@@ -1059,6 +1069,25 @@ function drawOreDeposit(res, x, y) {
 
 function clamp01(v) {
   return Math.max(0, Math.min(1, v));
+}
+
+// Weicher gelber Schein im Wärmeradius eines Lagerfeuers (CONFIG.campfireRadius).
+// Flackert leicht mit derselben Formel wie die Flamme selbst und wird mit
+// sinkendem Brennstoff (fuelPct) schwächer/kleiner.
+function drawCampfireGlow(s) {
+  const radius = CONFIG.campfireRadius || 130;
+  const flicker = 0.85 + Math.sin(performance.now() / 90 + s.id) * 0.15;
+  const r = radius * (0.7 + 0.3 * s.fuelPct) * flicker;
+
+  const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+  grad.addColorStop(0, "rgba(255, 200, 80, 0.28)");
+  grad.addColorStop(0.7, "rgba(255, 170, 60, 0.12)");
+  grad.addColorStop(1, "rgba(255, 170, 60, 0)");
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // Eine Struktur zeichnen: Lagerfeuer (Holzscheite + flackernde Flamme),
