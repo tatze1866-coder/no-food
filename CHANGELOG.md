@@ -2,6 +2,20 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-19 — Einheitliche Erz-Optik + Minimap-Punkte (Branch `main`)
+
+### Geändert
+- **Stein, Eisen, Gold und Diamant zeichnen jetzt alle dieselbe Achteck-Form**
+  (`drawOreDeposit()` in `js/game.js`) — nur die Farbpalette unterscheidet sich
+  pro Rohstoff (aus dem `color`-Feld im `ITEMS`-Katalog, also dieselbe Farbe
+  wie die Inventar-Kachel), mit einem **dunkleren Rand derselben Farbe** statt
+  eines starren Schwarz-Randes (neuer Helfer `darkenColor()`). Vorher hatte
+  Diamant eine eigene Kristall-Form und **Eisenerz wurde im Client gar nicht
+  gezeichnet** (fehlender Fall in `drawResource()`) — beides behoben.
+- **Erz-Vorkommen auf der Minimap**: Stein/Eisen/Gold/Diamant erscheinen dort
+  jetzt als kleine Punkte in ihrer jeweiligen Farbe (leere, abgebaute
+  Vorkommen werden ausgeblendet).
+
 ## 2026-07-18 — Wände, Bot-Basen & Mehrfach-Abbau (Branch `kimi`)
 
 ### Hinzugefügt
