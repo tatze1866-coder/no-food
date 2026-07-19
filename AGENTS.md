@@ -162,22 +162,61 @@ Rangliste, unterliegen denselben Regeln und benutzen dieselben
 Server-Funktionen wie Browser-Spieler (`tryHit`, `eat`, `craft`, `equip`,
 `placeItem`). Pro Tick setzt `botThink()` (Hook am Anfang von `update()`)
 ihre `input`-Tasten und löst Aktionen aus; `spawnBots()` in Abschnitt 8
-erzeugt sie beim Server-Start. Verhalten: Sie bauen der Reihe nach die
-Ziel-Leiter `BOT_GOALS` (Axt, Spitzhacke, Lagerfeuer, Eisen-Axt,
-Eisen-Spitzhacke, Schwert, Rucksack) und sammeln dafür Holz, Stein,
-Eisenerz und Beeren (`BOT_GATHER`); sie essen bei Hunger < 40, holen bei
-Hunger < 65 ohne Essen erst Beeren, stellen bei `cold` > 50 ein Lagerfeuer
-auf und wärmen sich, fliehen vor feindlichen Tieren (`botFleeRange` 150)
-und wandern sonst im Wald umher. Ist die Ausrüstungs-Leiter fertig, baut
-der Bot eine **Basis**: 8 Holzwände im Kreis (Radius 120) um ein einmal
-gewähltes Zentrum (`baseCenter`, `baseWalls`, `baseDone`) — er holzt
-zwischendurch für das Wand-Material und stellt die Wände selbst auf;
-klappt ein Platz 3 s lang nicht (z. B. weil er im Ozean liegt),
-überspringt er ihn (`placeTimer`). Klemmt ein Bot fest, läuft er kurz
-schräg auf einem Umweg weiter (Anti-Festklemmen-Logik); nach dem Tod
-startet er nach `botRespawn` (15 s) neu — die halb fertige Basis vergisst
-er dabei und fängt von vorn an. Weitere Werte: `botGatherRange` 2500. Der
-Client brauchte für die Bots keine Änderung.
+erzeugt sie beim Server-Start. **Aufgaben-Wahl (Utility-KI):** Pro Tick
+vergibt `botScoreTasks()` Scores an die Kandidaten FLUCHT, KAMPF, ESSEN,
+WÄRMEN, AUSRÜSTUNG, BASIS und SAMMELN — berechnet aus Hunger, Leben, Kälte,
+Gefahr und Persönlichkeit. Die laufende Aufgabe wird nur gewechselt, wenn
+sie ungültig/fertig ist oder eine andere um `botTaskSwitchMargin` (15)
+höher scored (**Hysterese** — kein ständiges Hin-und-Her). Jeder Bot hat
+eine **Persönlichkeit** aus `BOT_PERSONALITIES` (`aggressive`, `builder`,
+`farmer`, `cautious`; Verteilung in `BOT_SETUP`: 2×/1×/2×/1×) mit
+Parametern für Mut, Flucht-Reichweite, Rückzugs-Lebensschwelle,
+Jagd-/Bau-/Sammel-Neigung, Essens-Vorrat und Wanderradius — sichtbar z. B.
+daran, dass aggressive Bots aktiv Hasen und Wölfe jagen, vorsichtige früh
+fliehen und Schnee/Nacht meiden, Builder die Basis priorisieren und Farmer
+einen großen Essens-Vorrat halten. **Bewegung:** Bots laufen gezielt zu
+Zielen (`botWalkTo()`); Hindernis-Umgehung per **Tast-Sonden** (0°, ±40°,
+±80° vor dem Bot, billige AABB-Vorab-Checks wie im Kollisions-Code), und
+der Anti-Stuck eskaliert mehrstufig (Umweg ±45°, dann ±90°/±135°, dann Ziel
+aufgeben und für `botStuckBlacklistTime` 20 s auf die Sperrliste). **Kampf:**
+Abstand je nach Waffe (Speer kitet mit `botSpearDistance` 58 px am Rand der
+Reichweite, Schwert 40 px, bloße Hände nur gegen harmlose Tiere); die
+Kampf-Entscheidung (`botFightWorthIt()`) rechnet aus eigenem Leben,
+Waffenschaden und Tier-Stärke grob den erwarteten Rest-Schaden aus — Eisbär
+und Mammut sind ohne Top-Ausrüstung tabu. Verfolgungen haben
+Abbruch-Bedingungen (`botChaseMaxTime`, `botChaseMaxDist`, wachsender
+Abstand); bei wenig Leben (persönlichkeitsabhängige Schwelle) zieht sich
+der Bot zurück — fliehen, essen, zur Basis ans heilende Feuer.
+**Ressourcen:** Werkzeug zuerst (`botEnsureToolFor()`: Axt/Spitzhacke wird
+gebaut, bevor die davon abhängige Ressource gefarmt wird, falls bezahlbar);
+das Sammelziel bleibt per Commitment bestehen, bis es leer/ungültig ist;
+ein **Gedächtnis** (`bot.memory`, `botMemorySize` 6) merkt ergiebige
+Fundstellen je Ressourcen-Typ, bevorzugt sie bei der Suche und vergisst
+mehrfach leere Stellen (`botMemoryForgetMisses` 2). **Basis:** Die
+Standort-Suche (`botFindBaseSite()`) bewertet Zufalls-Kandidaten (Wald-Biom,
+nicht Ozean/Strand/Fluss, Bäume UND Beerensträucher in der Nähe, max.
+`botBaseMaxSpawnDist` vom Spawn) statt einfach die aktuelle Position;
+gebaut wird ein Ring aus 7 Holzwänden plus Tür wie bisher. Der
+Reparatur-Check (`botRepairCheck` 8 s) baut fehlende Wände nach UND tauscht
+beschädigte (< `botWallReplacePct` 35 % Leben — direkter Tausch im
+Bot-Code, weil Bots ihre eigenen Wände nicht schlagen können); der
+Feuer-Check (`botFireCheck` 5 s) hält in der Basis immer ein brennendes
+Lagerfeuer (`botFireMinFuel` 12 s Rest-Brennstoff). Bei Gefahr fliehen Bots
+hinter die eigenen Wände (dort zählen draußen stehende Tiere nicht als
+Bedrohung). Nach dem Tod startet der Bot nach `botRespawn` (15 s) neu —
+sein Fundstellen-Gedächtnis und ein noch stehender Ring (≥ 4 Wände) bleiben
+erhalten. Der Client brauchte für die Bots keine Änderung.
+
+**Vorsicht beim Ändern von Zahlen in `botScoreTasks()`:** Die Scores hängen
+voneinander ab. `scores.gather` (39–45 je nach Persönlichkeit) ist der
+Bodensatz und praktisch immer gültig — eine Aufgabe, die eine laufende
+ablösen soll, muss also `gather + botTaskSwitchMargin` (54–60) schlagen,
+sonst passiert sie faktisch nie. Umgekehrt darf eine Aufgabe ESSEN nicht
+dauerhaft überstimmen, sonst verhungern Bots. Beides ist beim ersten
+Utility-Umbau passiert und sah im Code jedes Mal völlig plausibel aus.
+Wer hier etwas anfasst: Server mit 6 Bots ein paar Minuten laufen lassen und
+Tode, Hunger und Anzahl gebauter Strukturen mit vorher vergleichen — im Code
+allein ist das nicht zu sehen.
 
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
 

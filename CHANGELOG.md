@@ -2,6 +2,117 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-19 — Bot-KI komplett neu: Utility-System mit Persönlichkeiten (Branch `kimi`)
+
+### Geändert
+- **Abschnitt 5b (Bots) komplett neu geschrieben** — weg von der festen
+  Ziel-Leiter (`BOT_GOALS`) plus Zufalls-Gewandere, hin zu einer
+  **Utility-KI**: Pro Tick bewerten Bots Hunger, Leben, Kälte und Gefahr und
+  vergeben Scores an die Aufgaben FLUCHT, KAMPF, ESSEN, WÄRMEN, AUSRÜSTUNG,
+  BASIS und SAMMELN (`botScoreTasks()`). Eine **Hysterese**
+  (`botTaskSwitchMargin` 15) sorgt dafür, dass die laufende Aufgabe nur bei
+  Ungültigkeit oder deutlich höherem Score gewechselt wird.
+- **Bot-Persönlichkeiten** (`BOT_PERSONALITIES` + `BOT_SETUP`): 2× aggressive,
+  1× builder, 2× farmer, 1× cautious — mit Gewichten für Mut, Flucht-Reichweite,
+  Rückzugs-Lebensschwelle, Jagd-/Bau-/Sammel-Neigung, Essens-Vorrat und
+  Wanderradius. Sichtbar: Aggressive jagen aktiv Hasen/Wölfe fürs Fleisch,
+  Vorsichtige fliehen früh und meiden Schnee und Nacht, Builder priorisieren
+  Basis und Reparatur, Farmer halten einen großen Essens-Vorrat.
+- **Bewegung mit Tast-Sonden** statt Zufalls-Wandern: der Bot läuft gezielt
+  zu Zielen und prüft davor 0°/±40°/±80° auf Hindernisse (Ressourcen, Wände,
+  Ozean — AABB-Vorab-Checks wie im Kollisions-Code). **Anti-Stuck mit
+  Eskalation**: erst Umweg ±45°, dann ±90°/±135°, dann Ziel aufgeben und für
+  `botStuckBlacklistTime` (20 s) auf eine Sperrliste.
+- **Kampf-KI**: Abstand je nach Waffe (Speer kitet mit 58 px am Rand der
+  Reichweite, Schwert 40 px, bloße Hände nur gegen harmlose Tiere);
+  Angriffs-Entscheidung per Schadens-Schätzung (`botFightWorthIt()`: eigene
+  LP + Waffenschaden gegen Tier-Stärke — Eisbär/Mammut bleiben ohne gute
+  Ausrüstung tabu); Verfolgung mit Abbruch bei zu großer Distanz
+  (`botChaseMaxDist`), zu langer Dauer (`botChaseMaxTime`) oder wachsendem
+  Abstand; Rückzug bei persönlichkeitsabhängiger LP-Schwelle zur Basis ans
+  heilende Feuer.
+- **Ressourcen**: Werkzeug zuerst — Axt/Spitzhacke wird gebaut, bevor die
+  davon abhängige Ressource gefarmt wird (`botEnsureToolFor()`, inkl.
+  Upgrade bei besserer bezahlbarer Stufe); Commitment auf das Sammelziel bis
+  leer/ungültig; **Fundstellen-Gedächtnis** pro Bot (`bot.memory`) bevorzugt
+  ergiebige Stellen und vergisst mehrfach leer vorgefundene
+  (`botMemorySize`, `botMemoryForgetMisses`).
+- **Basis-KI**: Standort-Suche mit Kandidaten-Bewertung (`botFindBaseSite()`:
+  Wald, nicht Ozean/Strand/Fluss, Bäume + Beerensträucher in der Nähe,
+  Spawn-Nähe) statt einfach der aktuellen Position; Reparatur-Check ersetzt
+  jetzt auch **beschädigte** Wände (< 35 % Leben — direkter Tausch im
+  Bot-Code, da Bots eigene Wände nicht schlagen können); ein **Feuer-Hüte-Check**
+  (`botFireCheck`) hält in der Basis immer ein brennendes Lagerfeuer
+  (`botFireMinFuel`). Gefangen im Spinnennetz schlagen Bots zurück, statt
+  sinnlos weiterzulaufen.
+
+### Behoben (Claude, nach Review + Integrationstests des obigen Umbaus)
+Der Umbau war beim Übernehmen ungetestet. Drei parallele Code-Reviews plus
+Integrationstests mit laufendem Server förderten diese Fehler zutage:
+- **Wandtausch war physisch unmöglich**: die Reparatur verlangte ≤ 35 px
+  Abstand zur Wand, die Kollision schiebt den Bot aber auf
+  `playerRadius` (24) + Wandradius (28) = 52 px heraus. Betroffene Bots
+  liefen bis zum Hungertod gegen die eigene Wand und legten dabei auch kein
+  Feuer mehr nach. Die Reichweite wird jetzt aus den echten Radien gerechnet.
+- **Wandtausch riss die alte Wand auch dann ab, wenn die neue nicht gesetzt
+  werden konnte** (Ozean, 50-px-Nachbarregel) → Loch im Ring. `placeItem()`
+  meldet jetzt Erfolg zurück; scheitert es, kommt die alte Wand zurück.
+- **Kampf schlug ins Leere**: `tryHit()` rechnet mit `player.angle`, der
+  Kampfcode setzte nur `bot.faceAngle`. Im Kite-Halteband läuft der Bot
+  nicht, dadurch blieb der Winkel auf dem Stand des letzten Laufschritts.
+- **BASIS konnte die Hysterese nie überwinden**: `scores.gather` ist der
+  Bodensatz (39–45) und praktisch immer gültig, `scores.base` erreichte
+  aber höchstens 45 — nötig wären `gather + 15`. Wer einmal sammelte, baute
+  und reparierte nie wieder. Instandhaltung skaliert jetzt nur noch teilweise
+  mit `buildDesire` (jeder hält sein Zuhause instand), Neubau weiter voll.
+- **Basis wurde nach jedem Tod aufgegeben**: die Prüfung suchte Wände im Band
+  60–100 px um die Mitte, tatsächlich stehen sie bei ~100–130 px. Band auf
+  40–160 px korrigiert und auf eigene Wände (`owner`) eingeschränkt.
+- **Beutesuche (1500 px) reichte weiter als der Verfolgungs-Abbruch
+  (1400 px)** — ein Tier dazwischen wurde jeden Tick neu gewählt und sofort
+  verworfen, der Bot stand regungslos. Suchradius wird jetzt gedeckelt.
+- **Verfolgungs-Abbruch startete die Jagd nur neu**: ohne Cooldown wurde
+  dasselbe Tier sofort wieder gewählt und `combat.time`/`worse` fingen bei 0
+  an — `botChaseMaxTime` hatte damit gar keine Wirkung. Jetzt 8 s Pause.
+- **Aufgabenwahl fiel auf FLUCHT statt SAMMELN zurück**: `bestScore` startete
+  bei −1, sodass schon der erste Eintrag (`flee`) mit Score 0 gewann; ohne
+  Gefahr tut `botFleeStep()` nichts → Bot stand still. Start jetzt bei 0.
+- **Fundstellen-Gedächtnis schlug die Nähe ohne Entfernungsgrenze** — eine
+  erinnerte Stelle am anderen Weltende gewann gegen den Baum davor. Auf
+  `botGatherRange` begrenzt.
+- **Sperrliste blockierte den ganzen Basis-Ring**: Sperrradius 250 px bei nur
+  ~160 px Abstand zwischen den Bauplätzen. Auf 90 px reduziert.
+- **Anti-Stuck erkannte Umkreisen nicht** (maß nur zurückgelegte Strecke) und
+  gab unerreichbare Bauplätze nie auf. Fortschritt wird jetzt zusätzlich als
+  Annäherung ans Ziel gemessen — aber erst nach vier Prüfungen in Folge ohne
+  Annäherung (~5 s), damit normales Ausweichen um einen Baum nicht als
+  Festklemmen zählt. Zielwechsel setzt die Messuhr `stuckTimer` mit zurück,
+  sonst misst die nächste Prüfung nur den Rest des Fensters und meldet
+  fälschlich „festgeklemmt" — das ließ die Sperrliste auf 16 Einträge
+  volllaufen und verhinderte jeden Basisbau.
+
+- **Bauen ließ Bots verhungern** (Nebeneffekt der obigen BASIS-Anhebung, erst
+  im Testlauf aufgefallen): der Builder erreicht beim Bauen 82 Punkte, ESSEN
+  aber höchstens ~51 — er mauerte weiter, bis der Notfall-Zweig bei Hunger 55
+  griff, was regelmäßig zu spät war (3 Tode in 5 Minuten). Jetzt gilt: wer
+  **keinen einzigen Bissen dabei hat**, bekommt `scores.base` auf 45 gedeckelt
+  und `scores.food` auf mindestens 70 angehoben. Mit Vorrat im Rucksack bauen
+  und reparieren weiterhin alle vier Persönlichkeiten unverändert.
+
+**Messwerte 5-Minuten-Testläufe, 6 Bots** (Kimis Stand → nach den Fixes):
+Strukturen 4 Wände / 7 Feuer → **25-34 Wände / 3-6 Feuer**; alle 6 Bots
+erreichen Eisenwerkzeug; Sperrliste dauerhaft leer statt bis zu 16 Einträgen;
+5 von 6 Bots bauen ein Zuhause (die aggressiven bleiben absichtlich ohne);
+Tode 5 → 1 nach dem Verhungerungs-Fix.
+
+*Hinweis für spätere Änderungen an `botScoreTasks()`:* Die Scores hängen
+voneinander ab — `scores.gather` (39-45) ist der Bodensatz, und jede Aufgabe,
+die eine laufende ablösen soll, muss `gather + botTaskSwitchMargin` schlagen.
+Wer hier eine Zahl anfasst, sollte einen Testlauf über mehrere Minuten machen
+und auf Tode, Hunger und gebaute Strukturen schauen — zwei der oben
+behobenen Fehler waren reine Zahlenverhältnisse, die im Code völlig
+plausibel aussahen.
+
 ## 2026-07-19 — Merge von `kimi`: Bot-Basen als Zuhause (Branch `main`)
 
 ### Hinzugefügt (von Kimi)
