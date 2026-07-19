@@ -17,27 +17,43 @@ WebSockets). Der Browser-Code läuft weiterhin direkt als klassisches
 `<script>`-Tag, der Server ist eine einzige Node.js-Datei.
 
 Die Welt ist eine große Karte (36000×36000, Kantenlänge 15× die ursprünglichen
-2400) mit drei **Biomen**: oben komplett
-**Schnee**, unten links **Wald** (Anfänger-Biom, hier starten die Spieler) und
-unten rechts **Ozean** (nicht begehbar — der Server blockt die Bewegung am
+2400) mit vier **Biomen**: oben komplett
+**Schnee**, unten links **Wald** (Anfänger-Biom, hier starten die Spieler),
+dazwischen ein schmaler **Strand**-Streifen (`beachWidth` 1400) und unten
+rechts **Ozean** (nicht begehbar — der Server blockt die Bewegung am
 Ufer). Die Biome sind in `server.js` als `BIOMES`-Rechtecke definiert, die
 Ressourcen-Anzahlen pro Biom stehen in `CONFIG` (`forestTrees`, `snowRocks`,
 `forestIronOre` usw.). Neben Bäumen, Steinen und Beerensträuchern erzeugt
 `createWorld()` **Eisenerz** (viel im Wald: 130 `forestIronOre`, wenig im
 Schnee: 35 `snowIronOre`), **Golderz** (umgekehrt: 35 `forestGoldOre` im
-Wald, 130 `snowGoldOre` im Schnee) sowie **Diamanten** nur im Schnee (70,
-`snowDiamond`). Durch den Wald fließt ein gewundener **Fluss** (`RIVERS`):
+Wald, 130 `snowGoldOre` im Schnee), **Diamanten** nur im Schnee (28,
+`snowDiamond`) sowie **Sand**-Häufchen am Strand (260 `beachSand`, mit der
+Schaufel abbaubar). Steine, Golderz und Diamanten sind **begrenzte
+Lagerstätten**: sie haben `amount`/`maxAmount` und wachsen alle
+`oreRegenInterval` (10 s) wieder nach (Stein max. 120, Gold max. 90,
+Diamant max. 40 — 20 % der Diamant-Vorkommen sind „groß" mit doppeltem
+Vorrat); Eisenerz und Sand sind dagegen unbegrenzt. Durch den Wald fließt
+ein gewundener **Fluss** (`RIVERS`):
 begehbar, aber man läuft darin langsamer (`riverWidth` 170,
 `riverSpeedMultiplier` 0.55; geprüft in `inRiver()`).
 Biome und Flüsse gehen per `welcome`-Nachricht (`config.biomes`,
 `config.rivers`) an den Client, der sie nur zeichnet.
 
-In der Welt leben **Tiere**: Hasen (Wald, neutral, fliehen vor Spielern),
-Spinnen (Wald, nur **nachts** feindlich), Wölfe (Wald, immer feindlich) und
-Eisbären (Schnee, immer feindlich). Der Server hält einen **Tag/Nacht-Wechsel**
+In der Welt leben **Tiere** (Anzahlen in `CONFIG`): Hasen (64, Wald, neutral,
+fliehen vor Spielern), Spinnen (60, Wald, nur **nachts** feindlich), Wölfe
+(67, Wald, immer feindlich), Polarfüchse (28, Schnee, immer feindlich,
+schnell), Eisbären (20, Schnee, immer feindlich, viel Leben), Mammuts (6,
+Schnee, **Mini-Boss** mit `boss: true`: sehr selten, sehr stark) sowie Krabben
+(52) und Königskrabben (12) am **Strand** — die beiden sind neutral, bis man
+sie angreift (`hostile: "onHit"`: erst ein Treffer setzt `animal.aggro`,
+danach sind sie feindlich und so schnell wie ein Spieler). Der Server hält
+einen **Tag/Nacht-Wechsel**
 (`worldTime`; `dayLength`/`nightLength` in `CONFIG`), die `state`-Nachricht
 enthält dafür `night` und die Liste `animals` (nur lebende Tiere). Feindliche
-Tiere verfolgen nur Spieler im eigenen Biom und beißen mit 1 s Sperre; getötete
+Tiere verfolgen nur Spieler im eigenen Biom und beißen mit 1 s Sperre;
+Spinnen fangen den Spieler zusätzlich kurz in einem Netz (`special: "web"`,
+`spiderTrapTime` 2 s — der Spieler ist `trapped` und kann sich nicht
+bewegen). Getötete
 Tiere geben **Fleisch** (`meat` im Inventar, essen mit E — sättigt mehr als
 Beeren) und spawnen nach `animalRespawn` Sekunden neu. Alle Tiere sind langsamer
 als der Spieler und bewegen sich **ruckweise** (Ruck–Stopp, siehe
@@ -45,9 +61,9 @@ als der Spieler und bewegen sich **ruckweise** (Ruck–Stopp, siehe
 `moveAnimal()` und gilt für Jagen, Fliehen und Wandern — so kann man Tieren
 ausweichen (und Hasen einholen). Die Tier-Werte stehen in
 `ANIMAL_TYPES` (Abschnitt 1), die KI in `updateAnimal()` (Abschnitt 6).
-Hasen, Spinnen und Wölfe zeichnet der Client als **Sprite-Bilder** aus
-`assets/` (`ANIMAL_SPRITES` in `js/game.js`), den Eisbär weiterhin als
-Vektor-Figur.
+Alle acht Tierarten zeichnet der Client als **Sprite-Bilder** aus
+`assets/` (`ANIMAL_SPRITES` in `js/game.js`, Größen-Faktoren in
+`SPRITE_SCALE`).
 
 **Kälte:** Spieler haben einen Kälte-Wert (`cold`, 0 = warm, 100 = erfriert),
 der nachts (`nightColdRate`) und im Schnee-Biom (`snowColdRate`) steigt und am
@@ -61,23 +77,42 @@ Dafür akzeptiert `eat` optional ein `item` (gezielt essen) und `ITEMS`
 markiert Essbares mit `food: true`.
 
 **Werkzeug-System:** Vier Werkzeugarten — **Axt**, **Spitzhacke**,
-**Schwert**, **Speer** — in je fünf Stufen (**Holz → Stein → Eisen → Gold →
-Diamant**, also 20 Werkzeuge); die Map `TOOLS` ordnet jeder Werkzeug-ID
-`kind` (`axe`/`pickaxe`/`sword`/`spear`) und `tier` (1–5) zu. Jede höhere
-Stufe kostet Rohstoffe **plus das Werkzeug der Vorstufe**, das `craft()` als
-Zutat verbraucht und dabei aus der Hand legt — die 20 Rezepte stehen in
-`RECIPES` (Beispiel Äxte: Holzaxt 3 Holz; Steinaxt 2 Holz + 3 Stein +
-Holzaxt; Eisenaxt 3 Eisenerz + 2 Stein + Steinaxt; Goldaxt 3 Golderz +
-2 Eisenerz + Eisenaxt; Diamantaxt 3 Diamant + 2 Golderz + Goldaxt — die
-anderen Arten analog). Ertrag und Schaden folgen der Formel Grundwert +
-Stufe × Bonus (`tryHit()`): Axt +2 Holz je Stufe (`axeWoodBonus`;
-3/5/7/9/11), Spitzhacke +2 Stein je Stufe (`pickaxeStoneBonus`; 3/5/7/9/11)
-sowie +1 beim Abbau von Eisenerz, Golderz und Diamant (`pickaxeOreBonus`;
-2/3/4/5/6), Schwert +8 Schaden je Stufe (`swordDamageBonus`), Speer +12
-(`spearDamageBonus` — stärker als das Schwert); mit bloßer Hand immer 1
-(`woodPerHit`/`stonePerHit`/`orePerHit`). Die vier Holz-Werkzeuge haben
-eigene Sprite-Bilder in `assets/` (`image` im `ITEMS`-Katalog), die höheren
-Stufen nutzen Emoji-Icons.
+**Schwert**, **Speer** — in je vier Stufen (**Holz → Eisen → Gold →
+Diamant**, also 16 Werkzeuge: `axe`, `iron_axe`, `gold_axe`, `diamond_axe`
+usw.), dazu die **Schaufel** (`shovel`) für Sand. Die Rezepte sind **flach**:
+Jede Stufe kostet nur Rohstoffe, **kein** Werkzeug der Vorstufe — die
+Rezepte stehen in `RECIPES` (Beispiele: Holz-Axt 3 Holz + 3 Stein, Eisen-Axt
+3 Holz + 4 Eisenerz, Gold-Axt 3 Holz + 5 Golderz, Diamant-Axt 3 Holz +
+4 Diamant). Jede Stufe bringt beim Bauen `craftPoints` (Holz 100, Eisen 300,
+Gold 1000, Diamant 2500; Schaufel 100). Ertrag und Schaden stehen als
+Boni in `CONFIG` (`tryHit()`): Axt +2/+4/+7/+11 Holz (`axeWoodBonus`,
+`axeIronBonus`, `axeGoldBonus`, `axeDiamondBonus` — jeweils zusätzlich zu
+`woodPerHit` 1), Spitzhacke analog +2/+4/+7/+11 beim Eisenerz
+(`pickaxeStoneBonus` … `pickaxeDiamondBonus`), Schwert +12/+20/+30/+45
+Schaden (`swordDamageBonus` …), Speer +20/+32/+45/+65 (`spearDamageBonus`
+… — stärker als das Schwert). Für Stein, Gold und Diamant bestimmt
+`pickaxeTier()` die Spitzhacken-Stufe (0 = bloße Hand bis 4 = Diamant) und
+die Tabellen `stoneYieldByTier` (1/1/2/3/4), `goldYieldByTier` (0/1/2/3/4)
+und `diamondYieldByTier` (0/0/0/1/2) die Ausbeute pro Schlag — wie im Wiki:
+**Gold nur mit Spitzhacke, Diamant nur mit mindestens der Gold-Spitzhacke**.
+Alle Werkzeug-Stufen haben eigene Sprite-Bilder in `assets/` (`image` im
+`ITEMS`-Katalog).
+
+**Punkte und Rangliste:** Es gibt Punkte fürs Sammeln (Holz/Stein 1,
+Eisenerz 5, Golderz 10, Diamant 100 — `pointsWood` … `pointsDiamond`),
+fürs Bauen von Werkzeug-Stufen (`craftPoints`, siehe oben) und fürs Töten
+von Tieren (`points` je Art in `ANIMAL_TYPES`, gestaffelt nach
+Gefährlichkeit: Hase 5 bis Mammut 300). `player.score` bleibt auch nach dem
+Tod erhalten und wird im `state` mitgeschickt; der Client zeigt oben rechts
+eine **Rangliste** mit den Top 5 (`leaderboardSize`). Holz, Stein, Eisenerz,
+Golderz und Diamant stapeln sich bis **9999** (`BULK_ITEMS`/
+`bulkCapacity`), alle anderen Items bleiben bei 20 (mit Rucksack 40).
+
+**Rüstung:** Neben dem Werkzeug-Slot gibt es einen eigenen Rüstungs-Platz
+(`player.armor`, Nachricht `equipArmor`; Items mit `armor: true`). Bislang
+gibt es den **Krabbenhelm** (`crab_helmet`): Krabben greifen den Träger gar
+nicht an, gegen alle anderen Tiere reduziert er den Schaden pauschal
+(`crabHelmetDamageReduction` 5).
 
 **Kollision (Hitboxen):** Ressourcen (Bäume, Steine, Erze, Diamanten,
 Sträucher) und Spieler haben Hitboxen — man kann nicht mehr hindurchlaufen.
@@ -87,6 +122,26 @@ an ihnen entlang), zwei Spieler werden weich je zur Hälfte
 auseinandergeschoben. Landet dabei jemand im Ozean, wird die Position
 zurückgesetzt — niemand wird ins Wasser geschubst. Tote Spieler blockieren
 nicht. Der Client brauchte dafür keine Änderung: der Server ist autoritativ.
+
+**Bots (KI-Mitspieler):** Damit sich die Welt belebt anfühlt (und man
+Multiplayer ohne zweiten Menschen testen kann), spielen `CONFIG.botCount`
+(6) **Bots** mit deutschen Namen ("Bot Ada" bis "Bot Frida") mit — sie
+stehen in Abschnitt 5b von `server.js`. Bots sind ganz normale
+Spieler-Objekte (`isBot: true`): sie erscheinen in `state` und in der
+Rangliste, unterliegen denselben Regeln und benutzen dieselben
+Server-Funktionen wie Browser-Spieler (`tryHit`, `eat`, `craft`, `equip`,
+`placeItem`). Pro Tick setzt `botThink()` (Hook am Anfang von `update()`)
+ihre `input`-Tasten und löst Aktionen aus; `spawnBots()` in Abschnitt 8
+erzeugt sie beim Server-Start. Verhalten: Sie bauen der Reihe nach die
+Ziel-Leiter `BOT_GOALS` (Axt, Spitzhacke, Lagerfeuer, Eisen-Axt,
+Eisen-Spitzhacke, Schwert, Rucksack) und sammeln dafür Holz, Stein,
+Eisenerz und Beeren (`BOT_GATHER`); sie essen bei Hunger < 40, holen bei
+Hunger < 65 ohne Essen erst Beeren, stellen bei `cold` > 50 ein Lagerfeuer
+auf und wärmen sich, fliehen vor feindlichen Tieren (`botFleeRange` 150)
+und wandern sonst im Wald umher. Klemmt ein Bot fest, läuft er kurz schräg
+auf einem Umweg weiter (Anti-Festklemmen-Logik); nach dem Tod startet er
+nach `botRespawn` (15 s) neu. Weitere Werte: `botGatherRange` 2500. Der
+Client brauchte für die Bots keine Änderung.
 
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
 
@@ -175,7 +230,7 @@ no-food/
 ├── style.css     # Aussehen des HUD und der Anzeige-Elemente (kein Spiel-Rendering)
 ├── js/
 │   └── game.js   # Browser-Client: Eingabe, Netzwerk, Zeichnen (eine Datei, keine Module)
-├── assets/       # Sprite-Bilder (Hase, Spinne, Wolf + die vier Holz-Werkzeuge)
+├── assets/       # Sprite-Bilder (alle Tierarten + alle Werkzeug-Stufen, Krabben-Items)
 ├── server.js     # Server: statische Dateien + autoritative Spiel-Logik + WebSocket-Protokoll
 ├── package.json  # npm start + einzige Abhängigkeit (ws)
 └── .gitignore    # node_modules/
@@ -257,5 +312,6 @@ CI/CD-Prozess.
   `restart-btn`, `start-screen`, `name-input`, `start-btn`, `start-status`)
   mit den Zugriffen in `js/game.js` übereinstimmen.
 - Geplante Features (siehe README.md): warme Kleidung aus Fellen o. ä.
-  Multiplayer, Biome, Tag/Nacht-Wechsel, Tiere, Crafting (inkl.
-  Werkzeug-Stufen von Holz bis Diamant), Lagerfeuer und Kälte sind umgesetzt.
+  Multiplayer, Biome (inkl. Strand), Tag/Nacht-Wechsel, Tiere, Crafting
+  (inkl. Werkzeug-Stufen von Holz bis Diamant), Lagerfeuer, Kälte,
+  Punkte/Rangliste und Bots sind umgesetzt.

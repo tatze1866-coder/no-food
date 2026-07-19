@@ -9,9 +9,10 @@
 // Aufbau dieser Datei:
 //   1. Einstellungen (alle Spielwerte) + Item-/Rezept-/Tier-Kataloge
 //   2. Hilfsfunktionen
-//   3. Statischer Dateiserver (liefert index.html, style.css, game.js)
+//   3. Statischer Dateiserver (liefert index.html, style.css, game.js, assets)
 //   4. Welt (Biome, Ressourcen, Tiere + Tag/Nacht)
 //   5. Spieler-Verwaltung (Inventar, beitreten, essen, crafting, respawn)
+//   5b. Bots (KI-Mitspieler: sammeln, bauen, überleben wie echte Spieler)
 //   6. Spiel-Logik (Tick: Bewegung, Kollision, Schlagen, Hunger, Tiere, Lagerfeuer)
 //   7. Netzwerk (Nachrichten empfangen und an alle senden)
 //   8. Spiel-Schleife (Server-Tick)
@@ -180,6 +181,13 @@ const CONFIG = {
   pointsGold: 10,         // Punkte pro Golderz
   pointsDiamond: 100,     // Punkte pro Diamant
   leaderboardSize: 5,     // Wie viele Spieler in der Rangliste stehen
+  // ------------------------------------------------------------------
+
+  // --- Bots (KI-Mitspieler, von Kimi) ----------------------------------
+  botCount: 6,          // KI-Spieler, die wie echte Spieler sammeln und überleben
+  botRespawn: 15,       // Sekunden bis ein toter Bot neu startet
+  botFleeRange: 150,    // Ab dieser Entfernung fliehen Bots vor feindlichen Tieren
+  botGatherRange: 2500, // So weit suchen Bots nach einer Ressource (Pixel)
   // ------------------------------------------------------------------
 };
 
@@ -840,11 +848,261 @@ function placeItem(player, itemId) {
   });
 }
 
+// ---------- 5b. BOTS (KI-Mitspieler, von Kimi) ----------
+// Bots sind ganz normale Spieler-Objekte: sie tauchen wie Mitspieler in der
+// Welt auf (auch in der Rangliste) und unterliegen denselben Regeln — nur
+// drückt bei ihnen keine Person Tasten, sondern der Server. Pro Tick setzt
+// botThink() die input-Felder und löst Aktionen über dieselben Funktionen
+// aus, die auch die Browser-Nachrichten benutzen (tryHit, eat, craft, ...).
+const BOT_NAMES = ["Bot Ada", "Bot Benni", "Bot Carla", "Bot Doro", "Bot Emil", "Bot Frida"];
+
+// In dieser Reihenfolge bauen Bots ihre Ausrüstung auf (Rezept-IDs aus
+// RECIPES). Gold/Diamant bleiben den Spielern überlassen — dafür müsste
+// man in den Schnee (Kälte + Eisbären), das überlassen die Bots lieber.
+const BOT_GOALS = ["axe", "pickaxe", "campfire", "iron_axe", "iron_pickaxe", "sword", "backpack"];
+
+// Welche Ressource liefert welches Item? (für den Abbau per Schlag)
+const BOT_GATHER = { wood: "tree", stone: "rock", iron_ore: "iron_ore", berry: "bush" };
+
+// Die Bots beim Server-Start erzeugen
+function spawnBots() {
+  for (let i = 0; i < CONFIG.botCount; i++) {
+    const name = BOT_NAMES[i] || "Bot " + (i + 1);
+    const id = nextPlayerId++;
+    addPlayer(id, name);
+    const p = players.get(id);
+    p.isBot = true;
+    p.bot = {
+      goalIndex: 0,       // welches Rezept aus BOT_GOALS als Nächstes drankommt
+      target: null,       // Ressourcen-Objekt, das gerade abgebaut wird
+      targetItem: null,   // welches Item damit gesammelt wird
+      wanderAngle: rand(0, Math.PI * 2),
+      wanderTimer: 0,
+      respawnTimer: 0,    // nach dem Tod: Sekunden bis zum Neustart
+      stuckTimer: 0,      // Anti-Festklemmen-Uhr
+      lastX: p.x,
+      lastY: p.y,
+      detourTimer: 0,     // > 0: Umweg-Modus aktiv
+      detourSign: 1,
+    };
+  }
+}
+
+// Hat der Bot irgendetwas Essbares im Inventar?
+function botHasFood(player) {
+  for (const id in player.inventory) {
+    if (player.inventory[id] > 0 && ITEMS[id] && ITEMS[id].food) return true;
+  }
+  return false;
+}
+
+// Nächstes feindliches Tier in Fluchtreichweite suchen (null = keine Gefahr)
+function nearestHostileAnimal(player) {
+  let nearest = null;
+  let nearestDist = CONFIG.botFleeRange;
+  for (const animal of animals) {
+    if (animal.dead) continue;
+    const type = ANIMAL_TYPES[animal.species];
+    const hostile = type.hostile === "always"
+      || (type.hostile === "night" && isNight())
+      || (type.hostile === "onHit" && animal.aggro);
+    if (!hostile) continue;
+    const d = dist(animal.x, animal.y, player.x, player.y);
+    if (d < nearestDist) {
+      nearest = animal;
+      nearestDist = d;
+    }
+  }
+  return nearest;
+}
+
+// Kann die Ressource, die der Bot anvisiert hat, noch abgebaut werden?
+function botTargetValid(player) {
+  const bot = player.bot;
+  const res = bot.target;
+  if (!res || bot.targetItem === null) return false;
+  if (BOT_GATHER[bot.targetItem] !== res.type) return false;
+  if (res.type === "rock" && (res.amount || 0) <= 0) return false; // Lagerstätte leer
+  if (res.type === "bush" && res.berries <= 0) return false;       // abgeerntet
+  return true;
+}
+
+// Nächste passende Ressource für ein Item suchen (null = keine in Reichweite)
+function botPickResource(player, itemId) {
+  const type = BOT_GATHER[itemId];
+  let best = null;
+  let bestDist = CONFIG.botGatherRange;
+  for (const res of resources) {
+    if (res.type !== type) continue;
+    if (type === "rock" && (res.amount || 0) <= 0) continue;
+    if (type === "bush" && res.berries <= 0) continue;
+    const d = dist(res.x, res.y, player.x, player.y);
+    if (d < bestDist) {
+      best = res;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+// Nächstes brennendes Lagerfeuer suchen (null = keins da)
+function botNearestCampfire(player) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const s of structures) {
+    if (s.type !== "campfire") continue;
+    const d = dist(s.x, s.y, player.x, player.y);
+    if (d < bestDist) {
+      best = s;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+// Aus einer Laufrichtung die vier Tasten ableiten (8 Richtungen)
+function botSetInput(input, angle) {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  input.right = dx > 0.3;
+  input.left = dx < -0.3;
+  input.down = dy > 0.3;
+  input.up = dy < -0.3;
+}
+
+// Das „Gehirn" eines Bots — läuft pro Tick VOR der allgemeinen Bewegung
+function botThink(player, dt) {
+  const bot = player.bot;
+  const input = player.input;
+  input.up = input.down = input.left = input.right = false;
+
+  // Tot: kurz warten, dann wie ein Spieler auf „Nochmal spielen" drücken
+  if (player.dead) {
+    bot.respawnTimer -= dt;
+    if (bot.respawnTimer <= 0) {
+      resetPlayer(player);
+      bot.respawnTimer = CONFIG.botRespawn;
+      bot.goalIndex = 0;
+      bot.target = null;
+      bot.targetItem = null;
+    }
+    return;
+  }
+
+  // Essen, wenn der Hunger drückt (eat sucht das beste Essen selbst aus)
+  if (player.hunger < 40) eat(player);
+
+  let moveAngle = null; // Richtung, in die der Bot laufen will (null = stehen)
+
+  // --- 1. Gefahr: vor feindlichen Tieren weglaufen ---
+  const threat = nearestHostileAnimal(player);
+  if (threat) {
+    moveAngle = Math.atan2(player.y - threat.y, player.x - threat.x);
+  }
+
+  // --- 2. Kälte: Lagerfeuer aufstellen bzw. dorthin laufen ---
+  if (moveAngle === null && player.cold > 50) {
+    if (countItem(player, "campfire") > 0) placeItem(player, "campfire");
+    const fire = botNearestCampfire(player);
+    if (fire) {
+      const d = dist(fire.x, fire.y, player.x, player.y);
+      if (d > 90) moveAngle = Math.atan2(fire.y - player.y, fire.x - player.x);
+      // sonst: am Feuer stehen bleiben und aufwärmen
+    }
+  }
+
+  // --- 3. Bauen / Sammeln ---
+  if (moveAngle === null) {
+    // Nächstes Ziel-Rezept; ist alles da, wird sofort gebaut
+    let goalId = BOT_GOALS[bot.goalIndex] || null;
+    if (goalId && canAfford(player, RECIPES[goalId].cost)) {
+      craft(player, goalId);
+      if (ITEMS[goalId] && ITEMS[goalId].tool) equip(player, goalId);
+      bot.goalIndex++;
+      goalId = BOT_GOALS[bot.goalIndex] || null;
+    }
+
+    // Was fehlt gerade? (Hunger schlägt Bauen: erst Beeren holen)
+    let needed = null;
+    if (player.hunger < 65 && !botHasFood(player)) {
+      needed = "berry";
+    } else if (goalId) {
+      for (const id in RECIPES[goalId].cost) {
+        if (countItem(player, id) < RECIPES[goalId].cost[id]) {
+          needed = id;
+          break;
+        }
+      }
+    } else {
+      needed = "wood"; // Leiter fertig: Bots hamstern weiter fleißig Holz
+    }
+
+    // Anvisierte Ressource noch brauchbar? Sonst eine neue suchen
+    if (!botTargetValid(player) || bot.targetItem !== needed) {
+      bot.target = botPickResource(player, needed);
+      bot.targetItem = bot.target ? needed : null;
+    }
+
+    if (bot.target) {
+      const res = bot.target;
+      const d = dist(res.x, res.y, player.x, player.y);
+      if (d <= res.radius + 50) {
+        // An der Ressource: draufhalten und schlagen (tryHit hat eigene Sperre)
+        player.angle = Math.atan2(res.y - player.y, res.x - player.x);
+        tryHit(player);
+      } else {
+        moveAngle = Math.atan2(res.y - player.y, res.x - player.x);
+      }
+    } else {
+      // Nichts zu tun / keine Ressource in Reichweite: umherwandern.
+      // Bots bleiben gern im Wald — außerhalb steuern sie zurück zur Mitte.
+      bot.wanderTimer -= dt;
+      if (bot.wanderTimer <= 0) {
+        bot.wanderTimer = rand(2, 4);
+        if (biomeAt(player.x, player.y).name !== "forest") {
+          const home = spawnPoint();
+          bot.wanderAngle = Math.atan2(home.y - player.y, home.x - player.x);
+        } else {
+          bot.wanderAngle = rand(0, Math.PI * 2);
+        }
+      }
+      moveAngle = bot.wanderAngle;
+    }
+  }
+
+  // --- Anti-Festklemmen: kommt der Bot trotz Laufens nicht vom Fleck,
+  // eine Weile schräg zur eigentlichen Richtung laufen (Umweg) ---
+  if (moveAngle !== null) {
+    bot.stuckTimer += dt;
+    if (bot.stuckTimer >= 1.5) {
+      const moved = dist(player.x, player.y, bot.lastX, bot.lastY);
+      if (moved < 25) {
+        bot.detourTimer = 0.7;
+        bot.detourSign = Math.random() < 0.5 ? 1 : -1;
+      }
+      bot.stuckTimer = 0;
+      bot.lastX = player.x;
+      bot.lastY = player.y;
+    }
+    if (bot.detourTimer > 0) {
+      bot.detourTimer -= dt;
+      moveAngle += bot.detourSign * 1.2; // ca. 70° Umweg
+    }
+    player.angle = moveAngle; // Blick in Laufrichtung (Schlagen setzt sie oben)
+    botSetInput(input, moveAngle);
+  }
+}
+
 // ---------- 6. SPIEL-LOGIK ----------
 // Läuft TICKS_PER_SECOND-mal pro Sekunde für alle Spieler zusammen.
 function update(dt) {
   // Zeit läuft weiter (für den Tag/Nacht-Wechsel)
   worldTime += dt;
+
+  // Bots zuerst: sie „drücken" ihre Tasten wie echte Spieler (Abschnitt 5b)
+  for (const player of players.values()) {
+    if (player.isBot) botThink(player, dt);
+  }
 
   for (const player of players.values()) {
     if (player.dead) continue;
@@ -1521,9 +1779,10 @@ wss.on("connection", (ws) => {
 });
 
 // ---------- 8. SPIEL-SCHLEIFE ----------
-// Welt einmal erzeugen, dann TICKS_PER_SECOND-mal pro Sekunde rechnen
-// und den neuen Stand an alle Browser schicken.
+// Welt einmal erzeugen, Bots dazusetzen, dann TICKS_PER_SECOND-mal pro
+// Sekunde rechnen und den neuen Stand an alle Browser schicken.
 createWorld();
+spawnBots();
 
 const dt = 1 / TICKS_PER_SECOND;
 setInterval(() => {

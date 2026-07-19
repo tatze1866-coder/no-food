@@ -70,7 +70,9 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 - 🌳 **Bäume** schlagen gibt **Holz**
 - 🐇 **Hasen** (Wald) sind harmlos und fliehen vor dir — jage sie für **Fleisch** 🍗
   (sättigt mehr als Beeren; Fleisch essen ebenfalls mit **E**)
-- 🐺 **Wölfe** (Wald) und 🐻‍❄️ **Eisbären** (Schnee) jagen **dich** — sie bewegen
+- 🐺 **Wölfe** (Wald), 🦊 **Polarfüchse**, 🐻‍❄️ **Eisbären** und 🦣 **Mammuts**
+  (Schnee — das Mammut ist ein seltener, sehr starker Boss) jagen **dich** —
+  sie bewegen
   sich ruckweise (Ruck–Stopp), also im richtigen Moment ausweichen oder zurückschlagen!
 - 🕷️ **Spinnen** (Wald) sind tagsüber friedlich, aber **nachts** feindlich
 - 🌙 **Tag und Nacht** wechseln sich ab — nachts wird es dunkel
@@ -88,6 +90,8 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 - 🏆 **Punkte** gibt's fürs Sammeln, Bauen und Töten von Tieren — die
   **Rangliste** oben rechts zeigt die Top 5 (Punkte bleiben nach dem Tod
   erhalten). Holz, Stein und Erze stapeln sich bis **9999**
+- 🤖 **Bots** spielen mit: Bot-Mitspieler sammeln und bauen wie echte
+  Spieler und tauchen in der Rangliste auf
 - 🍓 **Beerensträucher** schlagen gibt **Beeren** (wachsen nach!)
 - 🚶 **Hitboxen**: Du kannst nicht mehr durch Bäume, Steine, Erze, Sträucher
   — und auch nicht durch andere Spieler — hindurchlaufen
@@ -101,7 +105,7 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 | `index.html` | Die Spielseite (Anzeige-Elemente wie Balken, Inventar, Start-Bildschirm) |
 | `style.css` | Aussehen der Anzeige (Farben, Balken, Menüs) |
 | `js/game.js` | Der Browser-Client: Eingabe, Netzwerk, Zeichnen |
-| `assets/` | Sprite-Bilder: Tiere (Hase, Spinne, Wolf) und die Holz-Werkzeuge |
+| `assets/` | Sprite-Bilder: alle Tiere, alle Werkzeug-Stufen und die Krabben-Items |
 | `server.js` | Der Server: liefert die Dateien aus + rechnet die Spiellogik (Multiplayer) |
 | `package.json` | Start-Kommando (`npm start`) und die einzige Abhängigkeit (`ws`) |
 
@@ -112,9 +116,12 @@ und danach einfach den Server neu starten.
 ## Geplante Features (Ideen)
 
 - [ ] Warme Kleidung aus Fellen (Schutz vor Kälte)
-- [x] Crafting (Werkzeuge in fünf Stufen: Holz → Stein → Eisen → Gold → Diamant)
+- [x] Crafting (Werkzeuge in vier Stufen: Holz → Eisen → Gold → Diamant)
 - [x] Eisenerz, Golderz und Diamant als neue Rohstoffe (Diamant nur im Schnee)
 - [x] Werkzeuge sammeln schneller (höhere Stufe = mehr pro Schlag)
+- [x] Strand-Biom mit Sand, Krabben und Rüstung (Krabbenhelm)
+- [x] Punkte und Rangliste (Leaderboard)
+- [x] Bots (KI-Mitspieler)
 - [x] Kälte nachts und im Schnee (Lagerfeuer wärmt!)
 - [x] Tag/Nacht-Wechsel
 - [x] Tiere (Jagd und Gefahr)

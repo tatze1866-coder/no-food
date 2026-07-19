@@ -2,6 +2,39 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-18 — Merge main → kimi #2 + Bots (Branch `kimi`)
+
+### Geändert (Merge)
+- **`main` wurde zwischenzeitlich auf eine stabilere Code-Linie zurückgesetzt**
+  und erneut in `kimi` gemergt: Das Werkzeug-System hat jetzt **vier Stufen**
+  (**Holz → Eisen → Gold → Diamant**) für Axt, Spitzhacke, Schwert und Speer
+  mit **flachen Rezepten** — jede Stufe kostet nur Rohstoffe, kein
+  Vorgänger-Werkzeug mehr (IDs: `axe`, `iron_axe`, `gold_axe`, `diamond_axe`
+  usw.), dazu `craftPoints` je Stufe (Holz 100, Eisen 300, Gold 1000,
+  Diamant 2500). Die alte 5-Stufen-Kette (mit dem Werkzeug der Vorstufe als
+  Zutat) entfällt damit komplett.
+- Übernommene main-Neuerungen (Details stehen im main-Abschnitt darunter):
+  Punkte/Leaderboard, Bulk-Stacks bis 9999, Item-Info-Karten, Strand-Biom
+  mit Sand + Schaufel, Krabbe/Königskrabbe samt Krabbenspeer und Krabbenhelm
+  (Rüstungs-Slot), neue Tiere (Polarfuchs, Eisbär, Mammut als Boss),
+  Spinnennetz (`trapped`), Erz-Lagerstätten mit begrenztem Vorrat +
+  Nachwachsen, verdoppelte Tier-Spawns, Sprites für alle Werkzeug-Stufen
+  und Tiere.
+
+### Hinzugefügt
+- **Bots (KI-Mitspieler)**: `CONFIG.botCount` (6) Bots mit deutschen Namen
+  ("Bot Ada" bis "Bot Frida") sind wie echte Spieler in der Welt — inklusive
+  Rangliste — und benutzen dieselben Server-Funktionen wie Browser-Spieler
+  (`tryHit`, `eat`, `craft`, `equip`, `placeItem`). Sie sammeln Holz, Stein,
+  Eisenerz und Beeren, bauen der Reihe nach Axt, Spitzhacke, Lagerfeuer,
+  Eisen-Axt, Eisen-Spitzhacke, Schwert und Rucksack (`BOT_GOALS`), essen bei
+  Hunger, stellen bei Kälte ein Lagerfeuer auf und wärmen sich daran, fliehen
+  vor feindlichen Tieren (`botFleeRange`) und wandern sonst im Wald umher.
+  Eine Anti-Festklemmen-Logik weicht bei Stillstand kurz auf einen Umweg aus;
+  nach dem Tod starten Bots nach `botRespawn` (15 s) neu. Implementierung:
+  Abschnitt 5b in `server.js` (`botThink()`), Hook am Anfang von `update()`,
+  `spawnBots()` in Abschnitt 8.
+
 ## 2026-07-18 — Punkte, Strand-Biom & neue Tiere (Branch `main`)
 
 ### Hinzugefügt
