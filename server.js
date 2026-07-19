@@ -181,7 +181,7 @@ const CONFIG = {
   // ------------------------------------------------------------------
 
   // --- Bots (KI-Mitspieler, von Kimi) ----------------------------------
-  botCount: 50,          // KI-Spieler, die wie echte Spieler sammeln und überleben
+  botCount: 25,          // KI-Spieler, die wie echte Spieler sammeln und überleben
   botRespawn: 15,       // Sekunden bis ein toter Bot neu startet
   // Aufgaben-Wahl (Utility-KI): jede Aufgabe bekommt pro Tick einen Score.
   // Die laufende Aufgabe wird nur gewechselt, wenn sie ungültig/fertig ist
