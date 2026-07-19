@@ -1,2 +1,0 @@
-Resetting to stable commit f0ff6b5eaaa1aaedc95f62fff50b0a313196bed3
-This removes the last 4 problematic uploads.
