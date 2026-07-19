@@ -5,6 +5,22 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 ## Unveröffentlicht (Branch `main`)
 
 ### Hinzugefügt
+- **Strand-Biom** (Beach): schmaler Streifen zwischen Wald und Ozean, an
+  dem sich der Ozean etwas verschmälert, damit er reinpasst. Eigene Farbe
+  (`config.biomes`), begehbar wie Wald/Schnee.
+- **Sand** als neue Ressource am Strand (`sand_pile`), abbaubar mit der
+  neuen **Schaufel** (`shovel`, Rezept wie Axt/Spitzhacke).
+- **Krabbe** (`crab`) und **Königskrabbe** (`kingCrab`) als neue Strand-Tiere:
+  neutral, bis man sie angreift — danach genauso schnell wie ein Spieler und
+  feindlich (`hostile: "onHit"`, neuer Tier-Typ in `updateAnimal`). Drops:
+  Krabbenstäbchen (`crab_sticks`) + Krabbenscheren (`crab_claws`).
+- **Krabbenspeer** (`crab_spear`): normale Speer-Waffe gegen andere Tiere,
+  beruhigt und heilt aber aggressive Krabben statt ihnen zu schaden.
+- **Krabbenhelm** (`crab_helmet`): erster Rüstungs-Gegenstand im Spiel,
+  eigener Ausrüstungs-Platz (`player.armor`, Nachricht `equipArmor`) neben
+  dem Werkzeug-Slot. Reduziert Schaden aller Tiere leicht und Krabben
+  greifen den Träger gar nicht mehr an.
+
 - **Eigene Sprites für Polarfuchs, Eisbär und Mammut** (`assets/arctic-fox.png`,
   `assets/polar-bear.png`, `assets/mammoth.png`), im selben Sticker-Stil wie
   Hase/Wolf/Spinne (dicke farbige Kontur, glänzendes Highlight, große Augen —

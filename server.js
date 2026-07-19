@@ -152,6 +152,24 @@ const CONFIG = {
   // Flüsse im Wald: begehbar, aber man läuft darin langsamer
   riverWidth: 170,          // Breite eines Flusses in Pixeln
   riverSpeedMultiplier: 0.55, // Geschwindigkeits-Faktor im Fluss (1 = normal)
+
+  // --- Strand-Biom (Beach) -------------------------------------------
+  // Der Strand ist ein schmaler Streifen zwischen Wald und Ozean (wie im
+  // Wiki: "the border between the forest and the ocean").
+  beachWidth: 1400,       // Breite des Strand-Streifens in Pixeln
+  beachSand: 260,         // Sand-Häufchen im Strand-Biom
+  sandPerHit: 1,          // Sand pro Schlag mit bloßer Hand
+  shovelSandBonus: 3,     // Extra-Sand mit der Schaufel
+
+  // Krabben (Strand-Tiere, nach Wiki-Vorlage)
+  crabCount: 26,           // Krabben am Strand (neutral, bis man sie angreift)
+  kingCrabCount: 6,        // Königskrabben am Strand (seltener, stärker)
+  crabSpearHealAmount: 40, // Heilung pro Treffer mit dem Krabbenspeer
+  spearCrabDamageBonus: 26, // Schaden-Bonus des Krabbenspeers (zwischen Holz- und Eisen-Speer)
+  crabStickFood: 20,       // Krabbenstäbchen: 5 Stück füllen den Hunger komplett (20% je Stück)
+  crabClawFood: 10,        // Krabbenscheren: 10% Hunger je Stück
+  crabHelmetDamageReduction: 5, // Krabbenhelm: pauschal weniger Schaden von allen Tieren
+  // ------------------------------------------------------------------
 };
 
 // ---------- ITEMS: Katalog aller Gegenstände ----------
@@ -168,6 +186,7 @@ const ITEMS = {
   iron_ore:    { name: "Eisenerz",        icon: "⚙️" },
   gold_ore:    { name: "Golderz",         icon: "🥇" },
   diamond:     { name: "Diamant",         icon: "💎" },
+  sand:        { name: "Sand",            icon: "🏖️" },
 
   // Werkzeuge (ausrüstbar) — "image" zeigt auf ein eigenes Icon-Bild,
   // das der Client statt des Emojis anzeigt (icon bleibt als Fallback).
@@ -177,6 +196,7 @@ const ITEMS = {
   pickaxe:     { name: "Holz Spitzhacke", icon: "⛏️", image: "assets/tool-pickaxe.png", tool: true },
   sword:       { name: "Holz Schwert",    icon: "🗡️", image: "assets/tool-sword.png",   tool: true },
   spear:       { name: "Holz Speer",      icon: "🔱", image: "assets/tool-spear.png",   tool: true },
+  shovel:      { name: "Schaufel",        icon: "🥄", image: "assets/tool-shovel.png",  tool: true },
 
   iron_axe:     { name: "Eisen Axt",        icon: "🪓", tool: true },
   iron_pickaxe: { name: "Eisen Spitzhacke", icon: "⛏️", tool: true },
@@ -206,6 +226,13 @@ const ITEMS = {
   winter_fur:  { name: "Winterfell",      icon: "🐻‍❄️" },
   mammoth_fur: { name: "Mammutfell",      icon: "🦣" },
   spider_silk: { name: "Spinnenfaden",    icon: "🕸️" },
+
+  // Krabben (Strand-Biom) — Drops, Waffe und Rüstung nach Wiki-Vorlage
+  crab_sticks: { name: "Krabbenstäbchen", icon: "🍢", image: "assets/crab-sticks.png", food: true },
+  crab_claws:  { name: "Krabbenscheren",  icon: "🦞", image: "assets/crab-claws.png",  food: true },
+  crab_spear:  { name: "Krabbenspeer",    icon: "🔱", image: "assets/tool-crab-spear.png", tool: true },
+  // "armor: true" markiert Rüstung (eigener Ausrüstungs-Platz, siehe equipArmor)
+  crab_helmet: { name: "Krabbenhelm",     icon: "🦀", image: "assets/crab-helmet.png", armor: true },
 };
 
 // ---------- RECIPES: Crafting-Rezepte ----------
@@ -231,6 +258,10 @@ const RECIPES = {
   diamond_sword:   { name: "Diamant Schwert",    cost: { wood: 4, diamond: 5 }, result: { diamond_sword: 1 } },
   diamond_spear:   { name: "Diamant Speer",      cost: { wood: 5, diamond: 6 }, result: { diamond_spear: 1 } },
 
+  shovel:      { name: "Schaufel",       cost: { wood: 3, stone: 3 },   result: { shovel: 1 } },
+  crab_spear:  { name: "Krabbenspeer",   cost: { wood: 5, crab_claws: 5, stone: 2 }, result: { crab_spear: 1 } },
+  crab_helmet: { name: "Krabbenhelm",    cost: { crab_claws: 10, crab_sticks: 10, stone: 6 }, result: { crab_helmet: 1 } },
+
   campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
   backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
   // Kochen: braucht rohes Fleisch (von Tieren) UND Nähe zum Lagerfeuer
@@ -255,6 +286,16 @@ const ANIMAL_TYPES = {
   arcticFox: { biome: "snow",   speed: 230, health: 300,  damage: 40, meat: 2, furId: "winter_fur",  furAmount: 1,  radius: 20, hostile: "always" },
   polarBear: { biome: "snow",   speed: 195, health: 900,  damage: 60, meat: 3, furId: "winter_fur",  furAmount: 2,  radius: 27, hostile: "always" },
   mammoth:   { biome: "snow",   speed: 240, health: 3000, damage: 90, meat: 7, furId: "mammoth_fur", furAmount: 10, radius: 55, hostile: "always", boss: true },
+
+  // Krabben (Strand) — nach Wiki: "neutral, wandert friedlich, bis sie
+  // angegriffen wird — dann genauso schnell wie ein Spieler mit Waffe".
+  // hostile: "onHit" ist ein eigener Typ (siehe updateAnimal): das Tier
+  // wird erst feindlich, nachdem es einmal getroffen wurde (animal.aggro).
+  // "drops" ersetzt hier meat/furId — Krabben lassen eigene Items fallen.
+  crab:      { biome: "beach",  speed: 240, health: 240,  damage: 35, meat: 0, radius: 22, hostile: "onHit",
+               drops: { crab_sticks: 1, crab_claws: 1 } },
+  kingCrab:  { biome: "beach",  speed: 235, health: 600,  damage: 55, meat: 0, radius: 30, hostile: "onHit",
+               drops: { crab_sticks: 4, crab_claws: 4 } },
 };
 
 const TICKS_PER_SECOND = 20;   // Wie oft pro Sekunde der Server rechnet
@@ -308,6 +349,13 @@ const FILES = {
   "/assets/tool-pickaxe.png": ["assets/tool-pickaxe.png", "image/png"],
   "/assets/tool-sword.png": ["assets/tool-sword.png", "image/png"],
   "/assets/tool-spear.png": ["assets/tool-spear.png", "image/png"],
+  "/assets/crab.png": ["assets/crab.png", "image/png"],
+  "/assets/king-crab.png": ["assets/king-crab.png", "image/png"],
+  "/assets/tool-shovel.png": ["assets/tool-shovel.png", "image/png"],
+  "/assets/tool-crab-spear.png": ["assets/tool-crab-spear.png", "image/png"],
+  "/assets/crab-helmet.png": ["assets/crab-helmet.png", "image/png"],
+  "/assets/crab-claws.png": ["assets/crab-claws.png", "image/png"],
+  "/assets/crab-sticks.png": ["assets/crab-sticks.png", "image/png"],
 };
 
 const server = http.createServer((req, res) => {
@@ -338,10 +386,15 @@ const server = http.createServer((req, res) => {
 //   unten rechts:   Ozean (Wasser — darf nicht betreten werden)
 // Die Farbe schickt der Server beim Beitritt an die Browser zum Zeichnen.
 const half = CONFIG.worldSize / 2;
+// Der Strand ist ein schmaler Streifen genau an der Grenze zwischen Wald
+// (links) und Ozean (rechts) — daher rücken beide etwas zusammen, damit
+// der Strand dazwischenpasst, ohne dass irgendwo eine Lücke entsteht.
+const beachHalf = CONFIG.beachWidth / 2;
 const BIOMES = [
-  { name: "snow",   color: "#eef4fa", x: 0,    y: 0,    w: CONFIG.worldSize, h: half },
-  { name: "forest", color: "#5fae2d", x: 0,    y: half, w: half, h: half },
-  { name: "ocean",  color: "#2196d8", x: half, y: half, w: half, h: half },
+  { name: "snow",   color: "#eef4fa", x: 0,               y: 0,    w: CONFIG.worldSize,        h: half },
+  { name: "forest", color: "#5fae2d", x: 0,               y: half, w: half - beachHalf,         h: half },
+  { name: "beach",  color: "#e8d190", x: half - beachHalf, y: half, w: CONFIG.beachWidth,        h: half },
+  { name: "ocean",  color: "#2196d8", x: half + beachHalf, y: half, w: half - beachHalf,         h: half },
 ];
 
 // Flüsse: begehbare, aber langsamere Wasser-Streifen im Wald-Biom.
@@ -467,6 +520,13 @@ function createWorld() {
     });
   }
 
+  // Sand-Häufchen (Strand) — mit der Schaufel abbaubar, unbegrenzt wie Bäume
+  const beach = BIOMES.find((b) => b.name === "beach");
+  for (let i = 0; i < CONFIG.beachSand; i++) {
+    const pos = randInBiome(beach, 40);
+    resources.push({ type: "sand_pile", x: pos.x, y: pos.y, radius: rand(18, 26) });
+  }
+
   // Beerensträucher (Wald + Schnee)
   for (let i = 0; i < CONFIG.forestBushes + CONFIG.snowBushes; i++) {
     const biome = i < CONFIG.forestBushes ? forest : snow;
@@ -520,6 +580,9 @@ function spawnAnimals() {
         wanderTimer: 0,                     // wann die Richtung wieder wechselt
         // Zufallsstart im Ruck/Stopp-Zyklus, damit nicht alle im Gleichtakt rucken
         impulseTimer: rand(0, CONFIG.animalMoveTime + CONFIG.animalPauseTime),
+        // Nur für hostile: "onHit" (Krabben) genutzt: erst nach einem Treffer
+        // feindlich, siehe tryHit() und updateAnimal().
+        aggro: false,
       });
     }
   }
@@ -582,6 +645,7 @@ function addPlayer(id, name) {
     cold: 0,            // Wie sehr der Spieler friert (0 = warm, 100 = erfriert)
     inventory: {},      // Item-Sorte (id) -> Anzahl, z.B. { wood: 3, axe: 1 }
     equipped: null,     // Welches Werkzeug gerade in der Hand ist (id oder null)
+    armor: null,        // Angelegte Rüstung, z.B. "crab_helmet" (id oder null)
     hitTimer: 0,        // Zeit bis zum nächsten möglichen Schlag
     dead: false,
     trapped: 0,         // Sekunden, die der Spieler noch im Spinnennetz feststeckt
@@ -600,6 +664,7 @@ function resetPlayer(player) {
   player.cold = 0;
   player.inventory = {};
   player.equipped = null;
+  player.armor = null;
   player.hitTimer = 0;
   player.trapped = 0;
   player.dead = false;
@@ -706,6 +771,18 @@ function equip(player, toolId) {
   // Nur ausrüsten, was ein Werkzeug ist UND im Inventar liegt
   if (ITEMS[toolId] && ITEMS[toolId].tool && countItem(player, toolId) > 0) {
     player.equipped = toolId;
+  }
+}
+
+// Rüstung anlegen/ablegen (eigener Ausrüstungs-Platz neben dem Werkzeug,
+// z.B. der Krabbenhelm — siehe ITEMS: "armor: true").
+function equipArmor(player, itemId) {
+  if (itemId === null) {
+    player.armor = null;
+    return;
+  }
+  if (ITEMS[itemId] && ITEMS[itemId].armor && countItem(player, itemId) > 0) {
+    player.armor = itemId;
   }
 }
 
@@ -910,6 +987,7 @@ function updateAnimal(animal, dt) {
       animal.y = pos.y;
       animal.health = type.health;
       animal.dead = false;
+      animal.aggro = false;
     }
     return;
   }
@@ -931,8 +1009,11 @@ function updateAnimal(animal, dt) {
     }
   }
 
-  // Ist das Tier gerade feindlich? (Spinnen nur nachts!)
-  const hostile = type.hostile === "always" || (type.hostile === "night" && isNight());
+  // Ist das Tier gerade feindlich? (Spinnen nur nachts! Krabben erst,
+  // nachdem sie einmal getroffen wurden — siehe animal.aggro in tryHit())
+  const hostile = type.hostile === "always"
+    || (type.hostile === "night" && isNight())
+    || (type.hostile === "onHit" && animal.aggro);
 
   if (hostile && nearest && nearestDist < CONFIG.aggroRange) {
     // Feindlich: zum Spieler laufen und beißen
@@ -941,15 +1022,29 @@ function updateAnimal(animal, dt) {
       moveAnimal(animal, angle, type.speed, dt);
     } else if (animal.attackTimer <= 0) {
       animal.attackTimer = 1; // eine Sekunde Sperre zwischen zwei Bissen
-      nearest.health -= type.damage;
-      // Spinnen fangen den Spieler kurz in ihrem Netz — er kann sich
-      // währenddessen nicht bewegen (siehe Bewegung in update())
-      if (type.special === "web") {
-        nearest.trapped = CONFIG.spiderTrapTime;
-      }
-      if (nearest.health <= 0) {
-        nearest.health = 0;
-        nearest.dead = true;
+
+      // Krabbenhelm: Krabben greifen den Träger gar nicht an (wie im Wiki:
+      // "won't attack you"), gegen alle anderen Tiere schützt der Helm nur
+      // pauschal etwas (crabHelmetDamageReduction).
+      const isCrab = animal.species === "crab" || animal.species === "kingCrab";
+      const crabSafe = isCrab && nearest.armor === "crab_helmet";
+
+      if (!crabSafe) {
+        let dmg = type.damage;
+        if (nearest.armor === "crab_helmet") {
+          dmg = Math.max(0, dmg - CONFIG.crabHelmetDamageReduction);
+        }
+        nearest.health -= dmg;
+
+        // Spinnen fangen den Spieler kurz in ihrem Netz — er kann sich
+        // währenddessen nicht bewegen (siehe Bewegung in update())
+        if (type.special === "web") {
+          nearest.trapped = CONFIG.spiderTrapTime;
+        }
+        if (nearest.health <= 0) {
+          nearest.health = 0;
+          nearest.dead = true;
+        }
       }
     }
   } else if (animal.species === "rabbit" && nearest && nearestDist < CONFIG.fleeRange) {
@@ -1003,15 +1098,32 @@ function tryHit(player) {
     }
   }
 
-  // Ein Tier getroffen: es verliert Leben und lässt rohes Fleisch fallen.
-  // Mit ausgerüstetem Speer richtet der Schlag mehr Schaden an.
+  // Ein Tier getroffen: es verliert Leben und lässt Beute fallen (rohes
+  // Fleisch/Fell oder — bei Krabben — eigene Drops). Mit ausgerüstetem
+  // Speer richtet der Schlag mehr Schaden an.
   if (closestAnimal) {
     const type = ANIMAL_TYPES[closestAnimal.species];
+    const isCrab = closestAnimal.species === "crab" || closestAnimal.species === "kingCrab";
+
+    // Krabbenspeer auf eine bereits feindliche Krabbe: statt Schaden wird
+    // sie beruhigt (aggro=false) und geheilt — wie im Wiki: "calm down
+    // aggressive crabs" und "heal the crabs ... with the spear".
+    if (isCrab && player.equipped === "crab_spear" && closestAnimal.aggro) {
+      closestAnimal.aggro = false;
+      closestAnimal.health = Math.min(type.health, closestAnimal.health + CONFIG.crabSpearHealAmount);
+      return;
+    }
+
+    // Neutrale Krabbe wird durch JEDEN Treffer feindlich (wie im Wiki:
+    // "wander around peacefully until they are attacked by a player").
+    if (type.hostile === "onHit") closestAnimal.aggro = true;
+
     let damage = CONFIG.playerDamage;
     if (player.equipped === "spear") damage += CONFIG.spearDamageBonus;
     else if (player.equipped === "iron_spear") damage += CONFIG.spearIronDamageBonus;
     else if (player.equipped === "gold_spear") damage += CONFIG.spearGoldDamageBonus;
     else if (player.equipped === "diamond_spear") damage += CONFIG.spearDiamondDamageBonus;
+    else if (player.equipped === "crab_spear") damage += CONFIG.spearCrabDamageBonus;
     else if (player.equipped === "sword") damage += CONFIG.swordDamageBonus;
     else if (player.equipped === "iron_sword") damage += CONFIG.swordIronDamageBonus;
     else if (player.equipped === "gold_sword") damage += CONFIG.swordGoldDamageBonus;
@@ -1022,6 +1134,9 @@ function tryHit(player) {
       closestAnimal.respawnTimer = CONFIG.animalRespawn;
       if (type.meat > 0) giveItem(player, "raw_meat", type.meat);
       if (type.furId && type.furAmount > 0) giveItem(player, type.furId, type.furAmount);
+      if (type.drops) {
+        for (const dropId in type.drops) giveItem(player, dropId, type.drops[dropId]);
+      }
     }
     return;
   }
@@ -1075,6 +1190,13 @@ function tryHit(player) {
       closest.amount -= added;
       changedOres.add(closestIndex);
     }
+  } else if (closest.type === "sand_pile") {
+    // Sand: mit der Schaufel gibt's mehr, wie im Wiki ("using a shovel,
+    // you can harvest sand"). Unbegrenzt, wie Bäume — kein Vorrat, der
+    // ausgehen könnte.
+    let amount = CONFIG.sandPerHit;
+    if (player.equipped === "shovel") amount += CONFIG.shovelSandBonus;
+    giveItem(player, "sand", amount);
   } else if (closest.type === "bush" && closest.berries > 0) {
     const added = giveItem(player, "berry", 1);
     if (added > 0) {
@@ -1094,6 +1216,7 @@ function tryHit(player) {
 //   { t: "eat", item: "berry" (optional) }  Essen (bestimmtes oder bestes)
 //   { t: "craft", recipe: "axe" }           Ein Rezept bauen
 //   { t: "equip", tool: "axe"|null }         Werkzeug ausrüsten / weglegen
+//   { t: "equipArmor", item: "crab_helmet"|null }  Rüstung anlegen / ablegen
 //   { t: "place", item: "campfire" }        Etwas platzieren (Lagerfeuer)
 //   { t: "respawn" }                        Nach dem Tod neu starten
 //
@@ -1140,6 +1263,7 @@ function stateMessage() {
       cold: Math.round(p.cold),
       inventory: p.inventory,
       equipped: p.equipped,
+      armor: p.armor,
       dead: p.dead,
       trapped: p.trapped > 0,
       survivalTime: Math.floor(p.survivalTime),
@@ -1264,6 +1388,9 @@ wss.on("connection", (ws) => {
     } else if (msg.t === "equip") {
       // tool ist entweder ein Item-Name (String) oder null (weglegen)
       if (msg.tool === null || typeof msg.tool === "string") equip(player, msg.tool);
+    } else if (msg.t === "equipArmor") {
+      // item ist entweder ein Item-Name (String) oder null (ablegen)
+      if (msg.item === null || typeof msg.item === "string") equipArmor(player, msg.item);
     } else if (msg.t === "place") {
       if (typeof msg.item === "string") placeItem(player, msg.item);
     } else if (msg.t === "respawn") {

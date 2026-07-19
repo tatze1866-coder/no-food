@@ -56,9 +56,16 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 
 ## Spielregeln
 
-- 🗺️ Die Karte hat drei **Biome**: **Wald** (unten links, hier startest du),
-  **Schnee** (oben — karg, aber mehr Steine) und **Ozean** (unten rechts —
-  nicht begehbar)
+- 🗺️ Die Karte hat vier **Biome**: **Wald** (unten links, hier startest du),
+  **Schnee** (oben — karg, aber mehr Steine), **Strand** (schmaler Streifen
+  zwischen Wald und Ozean — hier gibt's Sand und Krabben) und **Ozean**
+  (unten rechts — nicht begehbar)
+- 🦀 **Krabben** (Strand) sind zunächst neutral — greifst du sie an, werden
+  sie so schnell wie du und feindlich. Sie geben Krabbenstäbchen und
+  -scheren (beides Essen). Mit **Schaufel** (Hotbar) lässt sich **Sand**
+  abbauen; aus Krabbenscheren/-stäbchen lassen sich **Krabbenspeer**
+  (beruhigt/heilt Krabben) und **Krabbenhelm** (Rüstung, Krabben greifen
+  dich damit nicht mehr an) craften
 - 🌳 **Bäume** schlagen gibt **Holz**
 - 🐇 **Hasen** (Wald) sind harmlos und fliehen vor dir — jage sie für **Fleisch** 🍗
   (sättigt mehr als Beeren; Fleisch essen ebenfalls mit **E**)

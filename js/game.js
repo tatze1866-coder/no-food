@@ -49,6 +49,8 @@ const ANIMAL_SPRITES = {
   arcticFox: "assets/arctic-fox.png",
   polarBear: "assets/polar-bear.png",
   mammoth: "assets/mammoth.png",
+  crab: "assets/crab.png",
+  kingCrab: "assets/king-crab.png",
 };
 const animalImages = {};
 for (const [species, src] of Object.entries(ANIMAL_SPRITES)) {
@@ -124,6 +126,8 @@ function useHotbarSlot(index) {
   const item = ITEMS[id];
   if (item && item.tool) {
     sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
+  } else if (item && item.armor) {
+    sendMessage({ t: "equipArmor", item: me.armor === id ? null : id });
   } else if (item && item.food) {
     sendMessage({ t: "eat", item: id });
   } else if (id === "campfire") {
@@ -289,6 +293,7 @@ function applyState(msg) {
     entry.cold = p.cold || 0; // Kälte: 0 bis 100 (100 = erfroren)
     entry.inventory = p.inventory || {};
     entry.equipped = p.equipped || null;
+    entry.armor = p.armor || null;
     entry.dead = p.dead;
     entry.survivalTime = p.survivalTime;
   }
@@ -450,7 +455,7 @@ let invSignature = "";
 
 function updateInventory(me) {
   const inv = me.inventory || {};
-  const signature = JSON.stringify(inv) + "|" + me.equipped;
+  const signature = JSON.stringify(inv) + "|" + me.equipped + "|" + me.armor;
   if (signature === invSignature) return;
   invSignature = signature;
 
@@ -481,6 +486,15 @@ function updateInventory(me) {
         slot.title = item.name + " – Klicken zum Ausrüsten";
         slot.addEventListener("click", () => {
           sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
+        });
+      } else if (item.armor) {
+        // Rüstung (z.B. Krabbenhelm): eigener Ausrüstungs-Platz, gleiche
+        // Optik wie Werkzeuge (anklickbar, "equipped"-Rahmen).
+        slot.classList.add("tool");
+        if (me.armor === id) slot.classList.add("equipped");
+        slot.title = item.name + " – Klicken zum Anlegen";
+        slot.addEventListener("click", () => {
+          sendMessage({ t: "equipArmor", item: me.armor === id ? null : id });
         });
       }
     } else {
@@ -790,7 +804,49 @@ function drawResource(res) {
     }
   } else if (res.type === "rock" || res.type === "gold_ore" || res.type === "diamond") {
     drawOreDeposit(res, x, y);
+  } else if (res.type === "sand_pile") {
+    drawSandPile(res, x, y);
   }
+}
+
+// Sand-Häufchen am Strand: ein heller Sandhügel mit ein paar kleinen
+// Muscheln/Steinchen, dezent im Stil der übrigen Ressourcen (dicke
+// schwarze Kontur, kleines Glanzlicht).
+function drawSandPile(res, x, y) {
+  ctx.save();
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 3.5;
+
+  // Hügel-Grundform (breite, flache Ellipse)
+  ctx.fillStyle = "#e8d19a";
+  ctx.beginPath();
+  ctx.ellipse(x, y, res.radius, res.radius * 0.62, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Etwas dunklerer Schatten unten, wie bei einem Sandhügel
+  ctx.fillStyle = "#d8bd7c";
+  ctx.beginPath();
+  ctx.ellipse(x, y + res.radius * 0.18, res.radius * 0.75, res.radius * 0.32, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Glanzlicht oben links
+  ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(x - res.radius * 0.3, y - res.radius * 0.25, res.radius * 0.28, res.radius * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Kleine Muschel als Deko
+  ctx.fillStyle = "#f5efe0";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x + res.radius * 0.35, y + res.radius * 0.05, res.radius * 0.16, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 // In welchem Biom liegt dieser Punkt? ("forest"/"snow"/"ocean" oder null)
@@ -937,6 +993,7 @@ function drawStructure(s) {
 const SPRITE_SCALE = {
   rabbit: 8.5, wolf: 13, spider: 26,
   arcticFox: 7.5, polarBear: 7.5, mammoth: 3.1,
+  crab: 6.5, kingCrab: 6.5,
 };
 
 // Ein Tier zeichnen (Hase, Spinne, Wolf, Polarfuchs, Eisbär, Mammut).
@@ -1063,6 +1120,23 @@ function drawPlayer(p) {
 
   ctx.restore();
 
+  // Angelegte Rüstung (Krabbenhelm) über dem Kopf zeichnen — bewusst NICHT
+  // mitgedreht wie Körper/Werkzeug, damit der Helm immer aufrecht sitzt
+  // (ähnlich wie der Name darunter).
+  let nameOffset = 12;
+  if (p.armor && ITEMS[p.armor]) {
+    const armorImg = getItemImage(p.armor);
+    ctx.save();
+    if (p.dead) ctx.globalAlpha = 0.4;
+    if (armorImg && armorImg.complete && armorImg.naturalWidth > 0) {
+      const hh = r * 1.5;
+      const hw = hh * (armorImg.naturalWidth / armorImg.naturalHeight);
+      ctx.drawImage(armorImg, p.x - hw / 2, p.y - r - hh * 0.8, hw, hh);
+      nameOffset = hh * 0.55 + 12;
+    }
+    ctx.restore();
+  }
+
   // Name über dem Kopf
   ctx.save();
   if (p.dead) ctx.globalAlpha = 0.4;
@@ -1070,9 +1144,9 @@ function drawPlayer(p) {
   ctx.textAlign = "center";
   ctx.lineWidth = 4;
   ctx.strokeStyle = "rgba(0, 0, 0, 0.6)";
-  ctx.strokeText(p.name, p.x, p.y - r - 12);
+  ctx.strokeText(p.name, p.x, p.y - r - nameOffset);
   ctx.fillStyle = "#ffffff";
-  ctx.fillText(p.name, p.x, p.y - r - 12);
+  ctx.fillText(p.name, p.x, p.y - r - nameOffset);
   ctx.restore();
 }
 
