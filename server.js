@@ -183,8 +183,11 @@ const CONFIG = {
   // --- Bots (KI-Mitspieler, von Kimi) ----------------------------------
   botCount: 6,          // KI-Spieler, die wie echte Spieler sammeln und überleben
   botRespawn: 15,       // Sekunden bis ein toter Bot neu startet
-  botFleeRange: 150,    // Ab dieser Entfernung fliehen Bots vor feindlichen Tieren
+  botFleeRange: 180,    // Ab dieser Entfernung fliehen Bots vor feindlichen Tieren
   botGatherRange: 2500, // So weit suchen Bots nach einer Ressource (Pixel)
+  botBaseRadius: 80,    // Radius des Wand-Rings um die Mitte der Bot-Basis
+  botHomeRange: 600,    // Mit Basis: so weit entfernt sammeln Bots höchstens
+  botRepairCheck: 8,    // Sekunden zwischen zwei Prüfungen auf fehlende Basis-Wände
   // ------------------------------------------------------------------
 };
 
@@ -917,12 +920,15 @@ function placeItem(player, itemId) {
     // Lagerfeuer wie bisher: brennt mit der Zeit ab (fuel)
     structures.push({ id: nextStructureId++, type: "campfire", x: px, y: py, fuel: CONFIG.campfireBurnTime });
   } else if (WALL_TYPES[itemId]) {
-    // Wände haben Leben und können mit Schlägen zerstört werden (siehe tryHit)
+    // Wände haben Leben und können mit Schlägen zerstört werden (siehe tryHit).
+    // owner merkt sich den Erbauer: Bots demolieren ihre eigenen Wände
+    // nicht, wenn sie dahinter Ressourcen ernten (siehe tryHit)
     structures.push({
       id: nextStructureId++,
       type: itemId,
       x: px,
       y: py,
+      owner: player.id,
       health: WALL_TYPES[itemId].health,
       maxHealth: WALL_TYPES[itemId].health,
     });
@@ -945,6 +951,11 @@ const BOT_GOALS = ["axe", "pickaxe", "campfire", "iron_axe", "iron_pickaxe", "sw
 // Welche Ressource liefert welches Item? (für den Abbau per Schlag)
 const BOT_GATHER = { wood: "tree", stone: "rock", iron_ore: "iron_ore", berry: "bush" };
 
+// Die Basis: ein Ring aus 7 Holzwänden (Radius botBaseRadius) um das Zuhause.
+// Platz 0 bleibt frei — das ist die Tür. BOT_BASE_BUILD = die zu bauenden Plätze.
+const BOT_BASE_SLOTS = 8;
+const BOT_BASE_BUILD = [1, 2, 3, 4, 5, 6, 7];
+
 // Die Bots beim Server-Start erzeugen
 function spawnBots() {
   for (let i = 0; i < CONFIG.botCount; i++) {
@@ -965,11 +976,13 @@ function spawnBots() {
       lastY: p.y,
       detourTimer: 0,     // > 0: Umweg-Modus aktiv
       detourSign: 1,
-      // Basis-Bau: 8 Holzwände im Kreis (Radius 120) um ein einmal gewähltes Zentrum
-      baseCenter: null,   // Zentrum der Basis (Position beim ersten Bau-Schritt)
-      baseWalls: 0,       // Wie viele der 8 Wand-Plätze gesetzt/übersprungen sind
-      baseDone: false,    // true = Basis fertig (danach nur noch Holz hamstern)
+      // Basis-Bau: Ring aus 7 Wänden direkt um die eigene Position; die
+      // fertige Basis ist das Zuhause (Sammeln, Flucht und Feuer in der Nähe)
+      baseCenter: null,   // Zentrum der Basis = Zuhause (Position beim ersten Bau-Schritt)
+      baseSlotsTodo: BOT_BASE_BUILD.slice(), // Wand-Plätze, die noch gebaut werden
+      baseDone: false,    // true = Basis fertig (danach nur noch wohnen + hamstern)
       placeTimer: 0,      // Wartezeit beim Platzieren (nach 3 s Platz überspringen)
+      repairTimer: 0,     // Uhr für die Reparatur-Prüfung (fehlende Wände)
     };
   }
 }
@@ -1013,16 +1026,23 @@ function botTargetValid(player) {
   return true;
 }
 
-// Nächste passende Ressource für ein Item suchen (null = keine in Reichweite)
+// Nächste passende Ressource für ein Item suchen (null = keine in Reichweite).
+// Hat der Bot schon eine Basis, wird nur in deren Nähe gesucht (botHomeRange) —
+// so bleibt der Bot in der Heimat, statt sich beim Sammeln zu verlaufen.
 function botPickResource(player, itemId) {
+  const bot = player.bot;
   const type = BOT_GATHER[itemId];
+  const home = bot && bot.baseCenter;
+  const ax = home ? home.x : player.x;
+  const ay = home ? home.y : player.y;
+  const range = home ? CONFIG.botHomeRange : CONFIG.botGatherRange;
   let best = null;
-  let bestDist = CONFIG.botGatherRange;
+  let bestDist = range;
   for (const res of resources) {
     if (res.type !== type) continue;
     if (RESOURCE_POOLS[type] && (res.amount || 0) <= 0) continue;
     if (type === "bush" && res.berries <= 0) continue;
-    const d = dist(res.x, res.y, player.x, player.y);
+    const d = dist(res.x, res.y, ax, ay);
     if (d < bestDist) {
       best = res;
       bestDist = d;
@@ -1071,11 +1091,31 @@ function botThink(player, dt) {
       bot.goalIndex = 0;
       bot.target = null;
       bot.targetItem = null;
-      // Auch die halb fertige Basis vergessen — der Bot fängt von vorn an
-      bot.baseCenter = null;
-      bot.baseWalls = 0;
-      bot.baseDone = false;
+      // Steht der alte Ring noch (mind. 4 Wände)? Dann bleibt es das Zuhause —
+      // fehlende Wände flickt danach die Reparatur-Prüfung. Nur wenn die
+      // Basis weg ist, fängt der Bot woanders von vorn an.
+      const oldHome = bot.baseCenter;
+      let keepHome = false;
+      if (oldHome) {
+        let standing = 0;
+        for (const s of structures) {
+          if (!WALL_TYPES[s.type]) continue;
+          const dd = dist(s.x, s.y, oldHome.x, oldHome.y);
+          if (dd >= 60 && dd <= 100) standing++;
+        }
+        keepHome = standing >= 4;
+      }
+      if (keepHome) {
+        bot.baseCenter = oldHome;
+        bot.baseSlotsTodo = [];
+        bot.baseDone = true;
+      } else {
+        bot.baseCenter = null;
+        bot.baseSlotsTodo = BOT_BASE_BUILD.slice();
+        bot.baseDone = false;
+      }
       bot.placeTimer = 0;
+      bot.repairTimer = 0;
     }
     return;
   }
@@ -1086,19 +1126,37 @@ function botThink(player, dt) {
   let moveAngle = null; // Richtung, in die der Bot laufen will (null = stehen)
 
   // --- 1. Gefahr: vor feindlichen Tieren weglaufen ---
+  // Wer schon ein Zuhause hat, flüchtet DORTHIN (hinter die eigenen Wände) —
+  // aber nur, wenn die Basis dabei nicht näher an der Gefahr liegt.
   const threat = nearestHostileAnimal(player);
   if (threat) {
-    moveAngle = Math.atan2(player.y - threat.y, player.x - threat.x);
+    const home = bot.baseCenter;
+    const homeDist = home ? dist(home.x, home.y, player.x, player.y) : Infinity;
+    if (home && homeDist < 800 && dist(threat.x, threat.y, home.x, home.y) > homeDist) {
+      moveAngle = Math.atan2(home.y - player.y, home.x - player.x); // nach Hause!
+    } else {
+      moveAngle = Math.atan2(player.y - threat.y, player.x - threat.x);
+    }
   }
 
   // --- 2. Kälte: Lagerfeuer aufstellen bzw. dorthin laufen ---
-  if (moveAngle === null && player.cold > 50) {
-    if (countItem(player, "campfire") > 0) placeItem(player, "campfire");
+  // Das Feuer gehört in die eigene Basis: dafür läuft der Bot erst nach Hause.
+  // Zu Hause feuert er notfalls auch mitten in der Flucht (das Feuer heilt).
+  const nearHome = bot.baseCenter
+    && dist(bot.baseCenter.x, bot.baseCenter.y, player.x, player.y) < 100;
+  if (player.cold > 50 && (moveAngle === null || nearHome)) {
     const fire = botNearestCampfire(player);
     if (fire) {
       const d = dist(fire.x, fire.y, player.x, player.y);
       if (d > 90) moveAngle = Math.atan2(fire.y - player.y, fire.x - player.x);
       // sonst: am Feuer stehen bleiben und aufwärmen
+    } else if (countItem(player, "campfire") > 0) {
+      if (bot.baseCenter && dist(bot.baseCenter.x, bot.baseCenter.y, player.x, player.y) > 60) {
+        // Erst heimlaufen, das Feuer wird in der Basis-Mitte aufgestellt
+        moveAngle = Math.atan2(bot.baseCenter.y - player.y, bot.baseCenter.x - player.x);
+      } else {
+        placeItem(player, "campfire");
+      }
     }
   }
 
@@ -1113,6 +1171,31 @@ function botThink(player, dt) {
       goalId = BOT_GOALS[bot.goalIndex] || null;
     }
 
+    // Ist die Basis fertig, wird regelmäßig geschaut, ob noch alle Wände
+    // stehen (die Tür — Platz 0 — zählt nicht). Fehlt eine, geht der Bau
+    // für genau diesen Platz wieder los (Reparatur).
+    if (bot.baseDone && bot.baseCenter) {
+      bot.repairTimer += dt;
+      if (bot.repairTimer >= CONFIG.botRepairCheck) {
+        bot.repairTimer = 0;
+        for (let slot = 1; slot < BOT_BASE_SLOTS; slot++) {
+          const a = (slot / BOT_BASE_SLOTS) * Math.PI * 2;
+          const sx = bot.baseCenter.x + Math.cos(a) * CONFIG.botBaseRadius;
+          const sy = bot.baseCenter.y + Math.sin(a) * CONFIG.botBaseRadius;
+          let standing = false;
+          for (const s of structures) {
+            if (!WALL_TYPES[s.type]) continue;
+            if (dist(s.x, s.y, sx, sy) < 30) { standing = true; break; }
+          }
+          if (!standing) {
+            bot.baseSlotsTodo.push(slot);
+            bot.baseDone = false;
+            break;
+          }
+        }
+      }
+    }
+
     // Was fehlt gerade? (Hunger schlägt Bauen: erst Beeren holen)
     let needed = null;
     if (player.hunger < 65 && !botHasFood(player)) {
@@ -1125,8 +1208,8 @@ function botThink(player, dt) {
         }
       }
     } else if (!bot.baseDone) {
-      // Ausrüstungs-Leiter fertig: jetzt eine Basis aus 8 Holzwänden im
-      // Kreis (Radius 120) um ein einmal gewähltes Zentrum bauen
+      // Ausrüstungs-Leiter fertig: jetzt die Basis — ein enger Ring aus
+      // 7 Holzwänden direkt um die eigene Position (Platz 0 bleibt als Tür frei)
       if (bot.baseCenter === null) bot.baseCenter = { x: player.x, y: player.y };
       if (countItem(player, "wood_wall") < 1) {
         // Keine Wand auf Lager: Holz sammeln und daraus Wände bauen
@@ -1144,11 +1227,12 @@ function botThink(player, dt) {
     if (needed !== "berry" && goalId === null && !bot.baseDone && countItem(player, "wood_wall") >= 1) {
       bot.target = null;
       bot.targetItem = null;
-      // Platz Nummer baseWalls auf dem Kreis um das Zentrum
-      const spotAngle = (bot.baseWalls / 8) * Math.PI * 2;
-      const spotX = bot.baseCenter.x + Math.cos(spotAngle) * 120;
-      const spotY = bot.baseCenter.y + Math.sin(spotAngle) * 120;
-      if (dist(spotX, spotY, player.x, player.y) > 60) {
+      // Nächster freier Platz auf dem Ring um das Zuhause
+      const slot = bot.baseSlotsTodo[0];
+      const spotAngle = (slot / BOT_BASE_SLOTS) * Math.PI * 2;
+      const spotX = bot.baseCenter.x + Math.cos(spotAngle) * CONFIG.botBaseRadius;
+      const spotY = bot.baseCenter.y + Math.sin(spotAngle) * CONFIG.botBaseRadius;
+      if (dist(spotX, spotY, player.x, player.y) > 30) {
         // Noch zu weit weg: zum Platz hinlaufen
         moveAngle = Math.atan2(spotY - player.y, spotX - player.x);
       } else {
@@ -1157,7 +1241,7 @@ function botThink(player, dt) {
         placeItem(player, "wood_wall");
         if (countItem(player, "wood_wall") === 0) {
           // Geklappt: die Wand ist weg — nächster Platz
-          bot.baseWalls++;
+          bot.baseSlotsTodo.shift();
           bot.placeTimer = 0;
         } else {
           // Klappt nicht (z.B. Platz im Ozean oder zu dicht an einer anderen
@@ -1165,11 +1249,11 @@ function botThink(player, dt) {
           // sonst würde der Bot hier dauerhaft festhängen
           bot.placeTimer += dt;
           if (bot.placeTimer >= 3) {
-            bot.baseWalls++;
+            bot.baseSlotsTodo.shift();
             bot.placeTimer = 0;
           }
         }
-        if (bot.baseWalls >= 8) bot.baseDone = true;
+        if (bot.baseSlotsTodo.length === 0) bot.baseDone = true;
       }
     } else {
       // Anvisierte Ressource noch brauchbar? Sonst eine neue suchen
@@ -1190,18 +1274,23 @@ function botThink(player, dt) {
         }
       } else {
         // Nichts zu tun / keine Ressource in Reichweite: umherwandern.
-        // Bots bleiben gern im Wald — außerhalb steuern sie zurück zur Mitte.
-        bot.wanderTimer -= dt;
-        if (bot.wanderTimer <= 0) {
-          bot.wanderTimer = rand(2, 4);
-          if (biomeAt(player.x, player.y).name !== "forest") {
-            const home = spawnPoint();
-            bot.wanderAngle = Math.atan2(home.y - player.y, home.x - player.x);
-          } else {
-            bot.wanderAngle = rand(0, Math.PI * 2);
+        // Wer ein Zuhause hat, bleibt in dessen Nähe (kurze Leine); Bots ohne
+        // Basis bleiben gern im Wald — außerhalb steuern sie zurück zur Mitte.
+        if (bot.baseCenter && dist(bot.baseCenter.x, bot.baseCenter.y, player.x, player.y) > 350) {
+          moveAngle = Math.atan2(bot.baseCenter.y - player.y, bot.baseCenter.x - player.x);
+        } else {
+          bot.wanderTimer -= dt;
+          if (bot.wanderTimer <= 0) {
+            bot.wanderTimer = rand(2, 4);
+            if (!bot.baseCenter && biomeAt(player.x, player.y).name !== "forest") {
+              const home = spawnPoint();
+              bot.wanderAngle = Math.atan2(home.y - player.y, home.x - player.x);
+            } else {
+              bot.wanderAngle = rand(0, Math.PI * 2);
+            }
           }
+          moveAngle = bot.wanderAngle;
         }
-        moveAngle = bot.wanderAngle;
       }
     }
   }
@@ -1788,9 +1877,11 @@ function tryHit(player) {
   // Vorrang 2: liegt eine Wand im Trefferbereich, wird NUR sie getroffen —
   // auch wenn eine Ressource näher wäre. Sonst könnte eine Wand, die dicht
   // an einem Baum/Stein steht, nie beschädigt werden (die Ressource würde
-  // jeden Schlag „abfangen"). Wände lassen NICHTS fallen — bei 0 Leben
-  // werden sie einfach entfernt (zerstört).
-  if (closestWall) {
+  // jeden Schlag „abfangen"). Ausnahme: Bots treffen ihre EIGENEN Wände
+  // nicht — sonst würden sie ihre Basis beim Ernten dahinter selbst
+  // demolieren; ihr Schlag geht dann stattdessen auf die Ressourcen durch.
+  // Wände lassen NICHTS fallen — bei 0 Leben werden sie einfach entfernt.
+  if (closestWall && !(player.isBot && closestWall.owner === player.id)) {
     closestWall.health -= hitDamage(player);
     if (closestWall.health <= 0) {
       structures.splice(structures.indexOf(closestWall), 1);
