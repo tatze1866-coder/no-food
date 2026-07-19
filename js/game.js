@@ -46,6 +46,11 @@ const ANIMAL_SPRITES = {
   rabbit: "assets/rabbit.png",
   wolf: "assets/wolf.png",
   spider: "assets/spider.png",
+  arcticFox: "assets/arctic-fox.png",
+  polarBear: "assets/polar-bear.png",
+  mammoth: "assets/mammoth.png",
+  crab: "assets/crab.png",
+  kingCrab: "assets/king-crab.png",
 };
 const animalImages = {};
 for (const [species, src] of Object.entries(ANIMAL_SPRITES)) {
@@ -69,13 +74,79 @@ function getItemImage(id) {
 }
 
 // HTML-Schnipsel für ein Item-Icon: Bild, wenn vorhanden, sonst Emoji.
+// Rohstoffe/Drops bekommen zusätzlich eine farbige Icon-Kachel (Wiki-Optik,
+// dunkler Kasten mit Rahmen in der Item-Farbe) — Werkzeuge/Rüstung
+// behalten ihr großes Sprite ohne Rahmen.
 function itemIconHtml(id) {
   const item = ITEMS[id];
   if (!item) return "";
-  if (item.image) {
-    return '<img class="icon-img" src="' + item.image + '" alt="">';
+  const inner = item.image ? '<img class="icon-img" src="' + item.image + '" alt="">' : item.icon;
+  if (item.tool || item.armor) return inner;
+  const color = item.color || "#9e9e9e";
+  return '<span class="item-tile" style="--item-color:' + color + '">' + inner + "</span>";
+}
+
+// Findet für ein Item heraus, wie man es bekommt: entweder direkt aus dem
+// Katalog (Sammeln/Drop-Items) oder — falls es Ergebnis eines Rezepts ist —
+// automatisch aus RECIPES zusammengebaut ("Crafting").
+function itemTypeAndSource(id) {
+  for (const rid in RECIPES) {
+    const recipe = RECIPES[rid];
+    if (recipe.result && recipe.result[id]) {
+      const parts = Object.entries(recipe.cost).map(
+        ([cid, n]) => (ITEMS[cid] ? ITEMS[cid].name : cid) + " x" + n
+      );
+      let source = "Gebaut aus " + parts.join(", ");
+      if (recipe.requiresNear === "campfire") source += " (am Lagerfeuer)";
+      return { type: "Crafting", source };
+    }
   }
-  return item.icon;
+  const item = ITEMS[id];
+  if (item && item.source) return { type: item.type || "Sammeln", source: item.source };
+  return null;
+}
+
+// Die Item-Info-Karte (Name, Icon, Spruch, Typ/Herkunft) anzeigen —
+// im Stil einer Wiki-Karte, folgt der Maus in der Nähe des Items.
+function showItemTooltip(id, x, y) {
+  const item = ITEMS[id];
+  const tip = document.getElementById("item-tooltip");
+  if (!item || !tip) return;
+
+  const info = itemTypeAndSource(id);
+  let html = '<div class="tip-header">' + item.name + "</div>";
+  html += '<div class="tip-icon-wrap">' + itemIconHtml(id) + "</div>";
+  if (item.flavor) html += '<div class="tip-flavor">„' + item.flavor + '"</div>';
+  if (info) {
+    html +=
+      '<div class="tip-row"><span class="tip-label">Typ</span><span>' + info.type + "</span></div>";
+    html +=
+      '<div class="tip-row"><span class="tip-label">Herkunft</span><span>' +
+      info.source +
+      "</span></div>";
+  }
+  tip.innerHTML = html;
+
+  // Karte nah am Mauszeiger, aber immer im Bildschirm
+  const width = 210;
+  let left = x + 18;
+  if (left + width > window.innerWidth) left = x - width - 18;
+  let top = Math.min(y, window.innerHeight - 190);
+  tip.style.left = left + "px";
+  tip.style.top = top + "px";
+  tip.classList.remove("hidden");
+}
+
+function hideItemTooltip() {
+  const tip = document.getElementById("item-tooltip");
+  if (tip) tip.classList.add("hidden");
+}
+
+// Item-Tooltip-Hover an ein Element hängen (Hotbar-Slot oder Rezept-Kachel)
+function attachItemTooltip(el, id) {
+  el.addEventListener("mouseenter", (e) => showItemTooltip(id, e.clientX, e.clientY));
+  el.addEventListener("mousemove", (e) => showItemTooltip(id, e.clientX, e.clientY));
+  el.addEventListener("mouseleave", hideItemTooltip);
 }
 
 function resizeCanvas() {
@@ -121,6 +192,8 @@ function useHotbarSlot(index) {
   const item = ITEMS[id];
   if (item && item.tool) {
     sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
+  } else if (item && item.armor) {
+    sendMessage({ t: "equipArmor", item: me.armor === id ? null : id });
   } else if (item && item.food) {
     sendMessage({ t: "eat", item: id });
   } else if (id === "campfire") {
@@ -286,8 +359,10 @@ function applyState(msg) {
     entry.cold = p.cold || 0; // Kälte: 0 bis 100 (100 = erfroren)
     entry.inventory = p.inventory || {};
     entry.equipped = p.equipped || null;
+    entry.armor = p.armor || null;
     entry.dead = p.dead;
     entry.survivalTime = p.survivalTime;
+    entry.score = p.score || 0;
   }
 
   // Tiere: genauso wie die Spieler weich bewegt (x/y Anzeige, tx/ty Ziel)
@@ -318,6 +393,16 @@ function applyState(msg) {
     if (resources[index]) {
       resources[index].berries = berries;
       resources[index].shake = 1;
+    }
+  }
+
+  // Geänderte Erz-Vorkommen: neuer Vorrat + kurz wackeln (abgebaut oder nachgewachsen)
+  if (msg.ores) {
+    for (const [index, amount] of msg.ores) {
+      if (resources[index]) {
+        resources[index].amount = amount;
+        resources[index].shake = 1;
+      }
     }
   }
 
@@ -403,19 +488,67 @@ function predictShake(me) {
   if (closest) closest.shake = 1;
 }
 
-// Anzeige (Balken + Inventar + Spielerzahl) aktualisieren
+// Anzeige (Balken + Inventar + Spielerzahl + Rangliste) aktualisieren
 function updateHUD(me) {
   if (me) {
     const healthPct = (me.health / CONFIG.maxHealth) * 100;
     const hungerPct = (me.hunger / CONFIG.maxHunger) * 100;
     // Kälte kommt schon als Wert von 0 bis 100 (100 = erfroren)
-    const coldPct = ((me.cold || 0) / 100) * 100;
+    const cold = me.cold || 0;
+    const coldPct = (cold / 100) * 100;
     document.getElementById("health-fill").style.width = healthPct + "%";
     document.getElementById("hunger-fill").style.width = hungerPct + "%";
     document.getElementById("cold-fill").style.width = coldPct + "%";
+    // Der Kälte-Balken wird erst angezeigt, wenn wirklich Kälte da ist —
+    // bei 0 (warm) bleibt er ausgeblendet, statt leer nebenherzustehen.
+    document.getElementById("cold-bar").classList.toggle("hidden", cold <= 0);
     updateInventory(me);
   }
   document.getElementById("player-count").textContent = players.size + " Spieler online";
+  updateLeaderboard();
+}
+
+// Rangliste oben rechts: die Top-Spieler nach Punkten, absteigend sortiert.
+let leaderboardSignature = "";
+function updateLeaderboard() {
+  const list = [...players.values()]
+    .filter((p) => p.name)
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, CONFIG.leaderboardSize || 5);
+
+  const signature = list.map((p) => p.id + ":" + p.name + ":" + p.score).join("|");
+  if (signature === leaderboardSignature) return;
+  leaderboardSignature = signature;
+
+  const board = document.getElementById("leaderboard");
+  if (!board) return;
+  let html = '<h3>🏆 Rangliste</h3>';
+  if (list.length === 0) {
+    html += '<div class="lb-empty">Noch keine Punkte</div>';
+  } else {
+    html += '<ol class="lb-list">';
+    for (const p of list) {
+      const mine = p.id === myId ? " lb-me" : "";
+      html +=
+        '<li class="' +
+        mine.trim() +
+        '"><span class="lb-name">' +
+        escapeHtml(p.name) +
+        '</span><span class="lb-score">' +
+        (p.score || 0) +
+        "</span></li>";
+    }
+    html += "</ol>";
+  }
+  board.innerHTML = html;
+}
+
+// Namen können vom Spieler frei gewählt werden — vor dem Einfügen als HTML
+// sichern, damit z.B. "<" im Namen keine Elemente kaputt macht.
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 // Liste der Item-IDs, die der Spieler besitzt (Anzahl > 0), in der
@@ -437,7 +570,7 @@ let invSignature = "";
 
 function updateInventory(me) {
   const inv = me.inventory || {};
-  const signature = JSON.stringify(inv) + "|" + me.equipped;
+  const signature = JSON.stringify(inv) + "|" + me.equipped + "|" + me.armor;
   if (signature === invSignature) return;
   invSignature = signature;
 
@@ -458,16 +591,23 @@ function updateInventory(me) {
 
     if (id) {
       const item = ITEMS[id];
-      slot.title = item.name;
       html += '<span class="icon">' + itemIconHtml(id) + "</span><span>" + inv[id] + "</span>";
+      attachItemTooltip(slot, id); // eigene Info-Karte statt Browser-Tooltip
 
       // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
       if (item.tool) {
         slot.classList.add("tool");
         if (me.equipped === id) slot.classList.add("equipped");
-        slot.title = item.name + " – Klicken zum Ausrüsten";
         slot.addEventListener("click", () => {
           sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
+        });
+      } else if (item.armor) {
+        // Rüstung (z.B. Krabbenhelm): eigener Ausrüstungs-Platz, gleiche
+        // Optik wie Werkzeuge (anklickbar, "equipped"-Rahmen).
+        slot.classList.add("tool");
+        if (me.armor === id) slot.classList.add("equipped");
+        slot.addEventListener("click", () => {
+          sendMessage({ t: "equipArmor", item: me.armor === id ? null : id });
         });
       }
     } else {
@@ -507,11 +647,11 @@ function buildRecipeMenu() {
     // Kopf: nur noch das Icon des Ergebnisses (Name als Tooltip beim Hover)
     const resultId = Object.keys(recipe.result)[0];
     const icon = ITEMS[resultId] ? itemIconHtml(resultId) : "";
-    row.title = recipe.name;
     const head = document.createElement("div");
     head.className = "recipe-head";
     head.innerHTML = "<span>" + icon + "</span>";
     row.appendChild(head);
+    if (resultId) attachItemTooltip(row, resultId); // eigene Info-Karte statt Browser-Tooltip
 
     // Kosten-Zeile (wird von refreshRecipeMenu gefüllt)
     const cost = document.createElement("div");
@@ -753,24 +893,6 @@ function drawResource(res) {
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.32, y - res.radius * 0.35, res.radius * 0.4, 0, Math.PI * 2);
     ctx.fill();
-  } else if (res.type === "rock") {
-    ctx.fillStyle = "#bdbdbd";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Kleine Details auf dem Stein
-    ctx.fillStyle = "#8d8d8d";
-    ctx.beginPath();
-    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.22, 0, Math.PI * 2);
-    ctx.fill();
-    // Glanzlicht
-    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
-    ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.28, 0, Math.PI * 2);
-    ctx.fill();
   } else if (res.type === "bush") {
     // Strauch
     ctx.fillStyle = "#4caf50";
@@ -793,89 +915,148 @@ function drawResource(res) {
       ctx.fill();
       ctx.stroke();
     }
-  } else if (res.type === "iron_ore") {
-    // Gestein mit rostig-braunen Eisenadern
-    ctx.fillStyle = "#8d8d8d";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+  } else if (res.type === "rock" || res.type === "gold_ore" || res.type === "diamond") {
+    drawOreDeposit(res, x, y);
+  } else if (res.type === "sand_pile") {
+    drawSandPile(res, x, y);
+  }
+}
+
+// Sand-Häufchen am Strand: ein heller Sandhügel mit ein paar kleinen
+// Muscheln/Steinchen, dezent im Stil der übrigen Ressourcen (dicke
+// schwarze Kontur, kleines Glanzlicht).
+function drawSandPile(res, x, y) {
+  ctx.save();
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 3.5;
+
+  // Hügel-Grundform (breite, flache Ellipse)
+  ctx.fillStyle = "#e8d19a";
+  ctx.beginPath();
+  ctx.ellipse(x, y, res.radius, res.radius * 0.62, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Etwas dunklerer Schatten unten, wie bei einem Sandhügel
+  ctx.fillStyle = "#d8bd7c";
+  ctx.beginPath();
+  ctx.ellipse(x, y + res.radius * 0.18, res.radius * 0.75, res.radius * 0.32, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Glanzlicht oben links
+  ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(x - res.radius * 0.3, y - res.radius * 0.25, res.radius * 0.28, res.radius * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Kleine Muschel als Deko
+  ctx.fillStyle = "#f5efe0";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x + res.radius * 0.35, y + res.radius * 0.05, res.radius * 0.16, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// In welchem Biom liegt dieser Punkt? ("forest"/"snow"/"ocean" oder null)
+// Nutzt dieselbe Biom-Liste, die auch den Hintergrund einfärbt.
+function biomeAt(px, py) {
+  for (const b of CONFIG.biomes) {
+    if (px >= b.x && px < b.x + b.w && py >= b.y && py < b.y + b.h) return b.name;
+  }
+  return null;
+}
+
+// Ein Achteck-Pfad zeichnen (Grundform für Stein-/Gold-Nuggets, wie im Wiki-Icon)
+function octagonPath(x, y, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const angle = (Math.PI / 4) * i + Math.PI / 8;
+    const px = x + Math.cos(angle) * r;
+    const py = y + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+// Stein-, Gold- und Diamant-Vorkommen zeichnen. Farbe hängt vom Biom ab
+// (im Schnee heller/blasser, wie im Wiki: zwei sichtbar unterschiedliche
+// Varianten pro Vorkommen). Fast leere Vorkommen wirken etwas blasser.
+function drawOreDeposit(res, x, y) {
+  const biome = biomeAt(res.x, res.y);
+  const fullness = res.maxAmount > 0 ? clamp01(res.amount / res.maxAmount) : 1;
+  const alpha = 0.55 + 0.45 * fullness; // fast leer -> etwas ausgeblichen
+
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.strokeStyle = "#000";
+
+  if (res.type === "rock") {
+    ctx.lineWidth = 4;
+    ctx.fillStyle = biome === "snow" ? "#e2ebea" : "#8f9a86";
+    octagonPath(x, y, res.radius);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#b5651d";
-    for (let i = 0; i < 3; i++) {
-      const angle = (i / 3) * Math.PI * 2 + 0.4;
-      const ox = x + Math.cos(angle) * res.radius * 0.45;
-      const oy = y + Math.sin(angle) * res.radius * 0.45;
-      ctx.beginPath();
-      ctx.arc(ox, oy, res.radius * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    // Facetten-Schattierung (dunklerer Achteck-Ausschnitt unten rechts)
+    ctx.fillStyle = biome === "snow" ? "#c7d4d2" : "#767f6d";
+    ctx.beginPath();
+    ctx.arc(x + res.radius * 0.22, y + res.radius * 0.28, res.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    // Glanzlicht
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
     ctx.fill();
   } else if (res.type === "gold_ore") {
-    // Gestein mit glänzenden Gold-Nuggets
-    ctx.fillStyle = "#9e9e9e";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
+    ctx.lineWidth = 4;
+    ctx.fillStyle = biome === "snow" ? "#ece1a6" : "#a89a3f";
+    octagonPath(x, y, res.radius);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#ffd700";
-    ctx.strokeStyle = "#c9a600";
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < 3; i++) {
-      const angle = (i / 3) * Math.PI * 2 + 0.4;
-      const ox = x + Math.cos(angle) * res.radius * 0.45;
-      const oy = y + Math.sin(angle) * res.radius * 0.45;
-      ctx.beginPath();
-      ctx.arc(ox, oy, res.radius * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.fillStyle = biome === "snow" ? "#dfd189" : "#8f8230";
+    ctx.beginPath();
+    ctx.arc(x + res.radius * 0.22, y + res.radius * 0.28, res.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
     ctx.fill();
   } else if (res.type === "diamond") {
-    // Diamant-Kristall (von Kimi): eisblaues Gestein mit heller Raute
-    ctx.fillStyle = "#4dd0e1";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 5;
+    // Kristall-Cluster: drei spitze Kristalle unterschiedlicher Höhe
+    ctx.lineWidth = 3.5;
+    ctx.fillStyle = "#5fd8cf";
+    const shard = (dx, h, w) => {
+      ctx.beginPath();
+      ctx.moveTo(x + dx, y + res.radius * 0.5);
+      ctx.lineTo(x + dx - w, y + res.radius * 0.5 - h * 0.55);
+      ctx.lineTo(x + dx, y - res.radius * 0.5 - h);
+      ctx.lineTo(x + dx + w, y + res.radius * 0.5 - h * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    };
+    shard(-res.radius * 0.45, res.radius * 1.15, res.radius * 0.32);
+    shard(res.radius * 0.15, res.radius * 1.55, res.radius * 0.4);
+    shard(res.radius * 0.65, res.radius * 0.95, res.radius * 0.28);
+    // Facetten-Glanz
+    ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
     ctx.beginPath();
-    ctx.arc(x, y, res.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Helle Einschlüsse im Kristall
-    ctx.fillStyle = "#b2ebf2";
-    ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.2, res.radius * 0.18, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + res.radius * 0.25, y + res.radius * 0.3, res.radius * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-    // Helle Raute in der Mitte als Erkennungszeichen
-    const dr = res.radius * 0.4;
-    ctx.fillStyle = "#e0f7fa";
-    ctx.strokeStyle = "#00838f";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x, y - dr);
-    ctx.lineTo(x + dr, y);
-    ctx.lineTo(x, y + dr);
-    ctx.lineTo(x - dr, y);
+    ctx.moveTo(x - res.radius * 0.05, y - res.radius * 1.4);
+    ctx.lineTo(x + res.radius * 0.15, y - res.radius * 0.5);
+    ctx.lineTo(x - res.radius * 0.15, y - res.radius * 0.5);
     ctx.closePath();
     ctx.fill();
-    ctx.stroke();
-    // Glanzlicht
-    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
-    ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.2, 0, Math.PI * 2);
-    ctx.fill();
   }
+  ctx.restore();
+}
+
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
 }
 
 // Ein Lagerfeuer zeichnen: Holzscheite + flackernde Flamme
@@ -919,11 +1100,19 @@ function drawStructure(s) {
   ctx.fill();
 }
 
-// Ein Tier zeichnen (Hase, Spinne, Wolf, Eisbär).
-// Die Sprite-Tiere (Hase, Spinne, Wolf) bleiben aufrecht und spiegeln sich
-// nur nach links/rechts, je nachdem wohin sie gerade laufen — eine volle
-// Drehung würde bei diesen frontal gezeichneten Icons komisch aussehen.
-// Der Eisbär wird weiterhin klassisch gezeichnet und dreht sich komplett.
+// Jede Art hat ihre eigene Sprite-Größe (Vielfaches des Kollisionsradius).
+// rabbit/wolf/spider: alte, hochformatige Sprites mit viel Rand oben/unten.
+// arcticFox/polarBear/mammoth: neue, eng zugeschnittene quadratische Sprites.
+const SPRITE_SCALE = {
+  rabbit: 8.5, wolf: 13, spider: 26,
+  arcticFox: 7.5, polarBear: 7.5, mammoth: 3.1,
+  crab: 6.5, kingCrab: 6.5,
+};
+
+// Ein Tier zeichnen (Hase, Spinne, Wolf, Polarfuchs, Eisbär, Mammut).
+// Alle sechs sind frontal gezeichnete Icon-Sprites: sie bleiben aufrecht und
+// spiegeln sich nur nach links/rechts, je nachdem wohin sie gerade laufen —
+// eine volle Drehung würde bei diesen frontalen Icons komisch aussehen.
 function drawAnimal(a) {
   // Wackel-Effekt beim Treffer (wie bei den Ressourcen)
   const shakeX = a.shake > 0 ? Math.sin(a.shake * 30) * 4 : 0;
@@ -934,49 +1123,23 @@ function drawAnimal(a) {
 
   const r = a.radius;
 
-  if (a.species === "rabbit" || a.species === "spider" || a.species === "wolf") {
-    // Nach links oder rechts spiegeln, je nach Laufrichtung (kein Kippen)
-    const facingLeft = Math.cos(a.angle || 0) < 0;
-    if (facingLeft) ctx.scale(-1, 1);
+  // Nach links oder rechts spiegeln, je nach Laufrichtung (kein Kippen)
+  const facingLeft = Math.cos(a.angle || 0) < 0;
+  if (facingLeft) ctx.scale(-1, 1);
 
-    // Sprite-Bild verwenden (ersetzt die frühere Vektor-Zeichnung)
-    const img = animalImages[a.species];
-    // Jede Art hat ihre eigene Größe (Vielfaches des Kollisionsradius)
-    const SPRITE_SCALE = { rabbit: 8.5, wolf: 13, spider: 26 };
-    const size = r * (SPRITE_SCALE[a.species] || 6.5);
-    if (img && img.complete && img.naturalWidth > 0) {
-      const aspect = img.naturalWidth / img.naturalHeight;
-      const h = size;
-      const w = size * aspect;
-      ctx.drawImage(img, -w / 2, -h / 2, w, h);
-    } else {
-      // Fallback, solange das Bild noch lädt: einfacher Kreis
-      ctx.fillStyle = "#999";
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else if (a.species === "bear") {
-    ctx.rotate(a.angle || 0);
-    // Ohren (hinten)
-    ctx.fillStyle = "#eceff1";
-    ctx.strokeStyle = "#90a4ae";
-    ctx.beginPath();
-    ctx.arc(-r * 0.3, -r * 0.8, r * 0.3, 0, Math.PI * 2);
-    ctx.arc(-r * 0.3, r * 0.8, r * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // Körper
+  const img = animalImages[a.species];
+  const size = r * (SPRITE_SCALE[a.species] || 6.5);
+  if (img && img.complete && img.naturalWidth > 0) {
+    const aspect = img.naturalWidth / img.naturalHeight;
+    const h = size;
+    const w = size * aspect;
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  } else {
+    // Fallback, solange das Bild noch lädt: einfacher Kreis
+    ctx.fillStyle = "#999";
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.stroke();
-    // Schnauze (vorne)
-    ctx.fillStyle = "#cfd8dc";
-    ctx.beginPath();
-    ctx.arc(r * 0.8, 0, r * 0.45, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
   }
 
   ctx.restore();
@@ -1049,7 +1212,43 @@ function drawPlayer(p) {
     }
   }
 
+  // Im Spinnennetz gefangen: ein helles Netz-Muster über der Figur
+  if (p.trapped) {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.lineWidth = 2;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.1, i * r * 0.7);
+      ctx.lineTo(r * 1.1, i * r * 0.7);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(i * r * 0.7, -r * 1.1);
+      ctx.lineTo(i * r * 0.7, r * 1.1);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.15, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.restore();
+
+  // Angelegte Rüstung (Krabbenhelm) über dem Kopf zeichnen — bewusst NICHT
+  // mitgedreht wie Körper/Werkzeug, damit der Helm immer aufrecht sitzt
+  // (ähnlich wie der Name darunter).
+  let nameOffset = 12;
+  if (p.armor && ITEMS[p.armor]) {
+    const armorImg = getItemImage(p.armor);
+    ctx.save();
+    if (p.dead) ctx.globalAlpha = 0.4;
+    if (armorImg && armorImg.complete && armorImg.naturalWidth > 0) {
+      const hh = r * 1.5;
+      const hw = hh * (armorImg.naturalWidth / armorImg.naturalHeight);
+      ctx.drawImage(armorImg, p.x - hw / 2, p.y - r - hh * 0.8, hw, hh);
+      nameOffset = hh * 0.55 + 12;
+    }
+    ctx.restore();
+  }
 
   // Name über dem Kopf
   ctx.save();
@@ -1058,9 +1257,9 @@ function drawPlayer(p) {
   ctx.textAlign = "center";
   ctx.lineWidth = 4;
   ctx.strokeStyle = "rgba(0, 0, 0, 0.6)";
-  ctx.strokeText(p.name, p.x, p.y - r - 12);
+  ctx.strokeText(p.name, p.x, p.y - r - nameOffset);
   ctx.fillStyle = "#ffffff";
-  ctx.fillText(p.name, p.x, p.y - r - 12);
+  ctx.fillText(p.name, p.x, p.y - r - nameOffset);
   ctx.restore();
 }
 

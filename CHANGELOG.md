@@ -2,6 +2,90 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-18 — Punkte, Strand-Biom & neue Tiere (Branch `main`)
+
+### Hinzugefügt
+- **Punkte fürs Craften**: Werkzeug-Stufen geben beim Bauen zusätzliche
+  Leaderboard-Punkte — Holz-Stufe (Axt/Spitzhacke/Schwert/Speer/Schaufel)
+  100 Punkte, Eisen-Stufe 300, Gold-Stufe 1000, Diamant-Stufe 2500
+  (`craftPoints` je Rezept in `RECIPES`, vergeben in `craft()`).
+- **Große Stacks für Rohstoffe**: Holz, Stein, Eisenerz, Golderz und
+  Diamant können jetzt bis zu **9999** pro Sorte gesammelt werden
+  (`BULK_ITEMS`/`CONFIG.bulkCapacity` in `server.js`) — alle anderen Items
+  (Essen, Werkzeuge, Felle ...) bleiben bei der normalen Obergrenze
+  (20, mit Rucksack 40).
+- **Rangliste (Leaderboard) oben rechts**: zeigt die Top 5 Spieler nach
+  Punkten. Punkte gibt's fürs Sammeln (1 Holz = 1 Punkt, 1 Stein = 1 Punkt,
+  1 Eisenerz = 5 Punkte, 1 Golderz = 10 Punkte, 1 Diamant = 100 Punkte) und
+  fürs Töten von Tieren (gestaffelt nach Gefährlichkeit: Hase 5, Krabbe 20,
+  Spinne 15, Wolf 25, Polarfuchs 30, Königskrabbe 50, Eisbär 60, Mammut 300).
+  Die Punkte bleiben auch nach dem Tod erhalten (`player.score` in
+  `server.js`, mitgeschickt im `state`).
+- **Item-Info-Karte beim Hovern**: jedes Item in Hotbar/Bau-Menü zeigt beim
+  Draufzeigen eine kleine Karte im Wiki-Stil (Name, Icon, kurzer Spruch,
+  Typ und Herkunft). Craftbare Items ermitteln ihre Herkunft automatisch aus
+  `RECIPES` ("Gebaut aus ..."), alle anderen aus den neuen `source`/`type`-
+  Feldern im `ITEMS`-Katalog.
+- **Farbige Icon-Kacheln für Rohstoffe/Drops**: Holz, Steine, Erze, Felle,
+  Beeren usw. haben jetzt ein eigenes `color`-Feld und werden in einer
+  dunklen, farblich umrandeten Kachel dargestellt (angelehnt an die
+  Item-Karten aus dem Starve.io-Wiki). Werkzeuge/Rüstung bleiben unverändert.
+- **Kältebalken blendet sich aus**: der ❄️-Balken wird nur noch angezeigt,
+  solange `cold > 0` ist — bei 0 (warm) steht er nicht mehr leer neben den
+  anderen beiden.
+
+### Geändert
+- **Tier-Spawns verdoppelt**: Hasen 32→64, Spinnen 20→60, Wölfe 16→67,
+  Polarfüchse 14→28, Eisbären 10→20, Mammuts 3→6, Krabben 26→52,
+  Königskrabben 6→12 (`CONFIG` in `server.js`).
+- **Leben/Hunger/Kälte-Balken** stehen jetzt nebeneinander statt
+  untereinander (`#bars` in `style.css`: `flex-direction: row`).
+
+- **Eigenes Icon für Sand** (`assets/sand.png`): kleiner Sandhügel in zwei
+  Brauntönen (heller oben/links, dunkler unten/rechts) mit ein paar
+  Sandkörner-Sprenkeln, statt nur dem 🏖️-Emoji in der Inventar-/Crafting-UI.
+- **`assets/crab.png` und `assets/king-crab.png` neu gezeichnet**: gleicher
+  Sticker-Look wie die Werkzeug-/Tier-Icons — rundes Krabben-Köpfchen mit
+  Antennen-Fransen oben, große Scherenzangen und Kulleraugen mit
+  Glanzlicht. Die normale Krabbe hat einen leichten Schlagschatten fürs
+  Sticker-Gefühl, die Königskrabbe ist dunkler/kräftiger eingefärbt und
+  ohne Schatten. Beide Sprites sind gleich zugeschnitten, die Königskrabbe
+  wirkt automatisch größer, weil ihr Kollisionsradius (30) schon größer
+  ist als der der normalen Krabbe (22) — `SPRITE_SCALE` in `js/game.js`
+  skaliert beide gleich, multipliziert aber mit dem Radius.
+- **Eigene Icons für Eisen-, Gold- und Diamant-Werkzeuge** (Axt, Spitzhacke,
+  Speer, Schwert): Sprites lagen bereits in `assets/` (z.B.
+  `tool-axe-iron.png`), waren aber noch keinem Item zugeordnet — Kommentar
+  im Item-Katalog sagte fälschlich "noch keine Sprites vorhanden". Jetzt in
+  `ITEMS` verlinkt und in `FILES` (statischer Dateiserver) freigegeben.
+  Gleiche Form wie das Holz-Werkzeug, nur eingefärbt: Eisen silbern/metallisch,
+  Gold goldfarben, Diamant hellblau — passend zu den Erzfarben.
+- **Strand-Biom** (Beach): schmaler Streifen zwischen Wald und Ozean, an
+  dem sich der Ozean etwas verschmälert, damit er reinpasst. Eigene Farbe
+  (`config.biomes`), begehbar wie Wald/Schnee.
+- **Sand** als neue Ressource am Strand (`sand_pile`), abbaubar mit der
+  neuen **Schaufel** (`shovel`, Rezept wie Axt/Spitzhacke).
+- **Krabbe** (`crab`) und **Königskrabbe** (`kingCrab`) als neue Strand-Tiere:
+  neutral, bis man sie angreift — danach genauso schnell wie ein Spieler und
+  feindlich (`hostile: "onHit"`, neuer Tier-Typ in `updateAnimal`). Drops:
+  Krabbenstäbchen (`crab_sticks`) + Krabbenscheren (`crab_claws`).
+- **Krabbenspeer** (`crab_spear`): normale Speer-Waffe gegen andere Tiere,
+  beruhigt und heilt aber aggressive Krabben statt ihnen zu schaden.
+- **Krabbenhelm** (`crab_helmet`): erster Rüstungs-Gegenstand im Spiel,
+  eigener Ausrüstungs-Platz (`player.armor`, Nachricht `equipArmor`) neben
+  dem Werkzeug-Slot. Reduziert Schaden aller Tiere leicht und Krabben
+  greifen den Träger gar nicht mehr an.
+
+- **Eigene Sprites für Polarfuchs, Eisbär und Mammut** (`assets/arctic-fox.png`,
+  `assets/polar-bear.png`, `assets/mammoth.png`), im selben Sticker-Stil wie
+  Hase/Wolf/Spinne (dicke farbige Kontur, glänzendes Highlight, große Augen —
+  passend zur Wiki-Beschreibung: weißer Fuchs mit roter Kontur/roten Augen,
+  weißer Bär, brauner Mammut mit Stoßzähnen). `drawAnimal()` in `js/game.js`
+  zeichnet jetzt **alle sechs** Tierarten einheitlich als gespiegelte
+  Frontal-Sprites statt die drei Schnee-Tiere per Vektor zu zeichnen; die
+  alte Vektor-Zeichnung wurde entfernt. Größen-Faktoren stehen in
+  `SPRITE_SCALE`.
+
 ## 2026-07-18 — Merge main → kimi + Hitboxen (Branch `kimi`)
 
 ### Geändert (Merge)
@@ -27,22 +111,6 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 Das beste aus zwei parallelen Arbeiten kombiniert (Kollege + Kimi): der Kollege
 hatte Werkzeug-Stufen (Holz/Eisen/Gold für Axt, Spitzhacke, Schwert, Speer),
 Kimi hatte Diamant als neuen Rohstoff und eine saubere Werkzeug-Kette.
-
-### Hinzugefügt
-- **Diamant** (💎): neuer, seltenster Rohstoff — kommt **nur im Schnee-Biom** vor
-  (`snowDiamond` in `CONFIG`), eisblauer Kristall mit heller Raute (von Kimi).
-- **Fünf Werkzeug-Stufen** für alle vier Werkzeugarten (Axt, Spitzhacke,
-  Schwert, Speer): **Holz → Stein → Eisen → Gold → Diamant** (20 Werkzeuge).
-- **Werkzeug-Kette** (Idee von Kimi): jede höhere Stufe braucht das Werkzeug der
-  Vorstufe als Zutat + das neue Material. Man arbeitet sich Schritt für Schritt
-  hoch. Wird das ausgerüstete Werkzeug beim Bauen verbraucht, wird es automatisch
-  aus der Hand gelegt.
-
-### Geändert
-- **Ertrag/Schaden über Stufen-Formel** statt vieler Einzelabfragen: Ertrag bzw.
-  Schaden = Grundwert + Stufe × Bonus. Neue `TOOLS`-Tabelle (kind + tier) in
-  `server.js`; `tryHit()` nutzt sie. Spitzhacke baut Stein, Eisenerz, Golderz und
-  Diamant ab; Speer macht mehr Schaden als das Schwert.
 
 ## Unveröffentlicht (Branch `kimi`)
 

@@ -54,7 +54,34 @@ const CONFIG = {
   forestGoldOre: 35,      // Golderz im Wald: selten
   snowGoldOre: 130,       // Golderz im Schnee: häufig
   snowIronOre: 35,        // Eisenerz im Schnee: selten
-  snowDiamond: 70,        // Diamanten (von Kimi): NUR im Schnee, die seltenste Ressource
+  // Diamant: NUR im Schnee (wie im Wiki: "nur im Winter oder in der von
+  // Drachen bewachten Höhle" — die Höhle gibt es in no-food noch nicht,
+  // deshalb aktuell ausschließlich Schnee-Vorkommen). Deutlich seltener als Gold.
+  snowDiamond: 28,
+
+  // Erz-Vorkommen sind begrenzte Lagerstätten, die sich mit der Zeit wieder
+  // auffüllen (wie im Wiki beschrieben) — anders als Bäume/Steine, die
+  // unbegrenzt sind. amount = aktueller Vorrat, maxAmount = volle Größe.
+  oreRegenInterval: 10,   // Sekunden zwischen zwei Nachwachs-Schüben (wie im Wiki: "alle 10 Sekunden")
+  stoneMaxAmount: 120,    // Stein-Vorkommen: Vorrat pro Lagerstätte
+  stoneRegenMin: 1,       // Stein wächst 1-4 pro Schub nach (abhängig von Größe)
+  stoneRegenMax: 4,
+  goldMaxAmount: 90,      // Gold-Vorkommen: Vorrat pro Lagerstätte
+  goldRegenMin: 1,        // Gold wächst 1-3 pro Schub nach
+  goldRegenMax: 3,
+  diamondMaxAmount: 40,   // Diamant-Vorkommen: Vorrat pro Lagerstätte
+  diamondRegenMin: 1,     // Diamant wächst 1-2 pro Schub nach (große Vorkommen: doppelt)
+  diamondRegenMax: 2,
+  diamondLargeChance: 0.2, // 20% der Diamant-Vorkommen sind "groß": mehr Vorrat + doppeltes Nachwachsen
+
+  // Ausbeute pro Schlag, gestaffelt nach Spitzhacken-Stufe — Index 0-4:
+  // [bloße Hand, Holz-Spitzhacke, Eisen-Spitzhacke, Gold-Spitzhacke, Diamant-Spitzhacke].
+  // Genau wie im Wiki: Stein mit JEDER Spitzhacke abbaubar (auch bloßer Hand,
+  // sonst käme man nie an die erste Spitzhacke); Gold braucht mindestens eine
+  // Spitzhacke; Diamant braucht mindestens eine Gold-Spitzhacke.
+  stoneYieldByTier:   [1, 1, 2, 3, 4],
+  goldYieldByTier:    [0, 1, 2, 3, 4],
+  diamondYieldByTier: [0, 0, 0, 1, 2],
 
   bushBerries: 4,         // Beeren pro Strauch
   berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
@@ -67,33 +94,46 @@ const CONFIG = {
   playerDamage: 20,       // Grundschaden des Spieler-Schlags gegen Tiere
   // Tiere nur 4x so viele wie früher (nicht 15x): Sie werden 20x pro Sekunde
   // an alle Browser geschickt — zu viele würden das Netzwerk überlasten.
-  rabbitCount: 32,        // Hasen im Wald (neutral, fliehen)
-  spiderCount: 20,        // Spinnen im Wald (nur NACHTS feindlich)
-  wolfCount: 16,          // Wölfe im Wald (immer feindlich)
-  bearCount: 12,          // Eisbären im Schnee (immer feindlich)
+  // (Nochmal verdoppelt gegenüber der ursprünglichen 4x-Anzahl.)
+  rabbitCount: 64,        // Hasen im Wald (neutral, fliehen)
+  spiderCount: 60,        // Spinnen im Wald (nur NACHTS feindlich)
+  wolfCount: 67,          // Wölfe im Wald (immer feindlich)
+  arcticFoxCount: 28,     // Polarfüchse im Schnee (immer feindlich, schnell)
+  polarBearCount: 20,     // Eisbären im Schnee (immer feindlich, viel Leben)
+  mammothCount: 6,        // Mammuts im Schnee (Mini-Boss: sehr selten, sehr stark)
   animalRespawn: 30,      // Sekunden bis ein getötetes Tier neu spawnt
   aggroRange: 260,        // Ab dieser Entfernung verfolgen feindliche Tiere
   fleeRange: 150,         // Ab dieser Entfernung fliehen Hasen vor Spielern
   animalMoveTime: 0.6,    // Sekunden pro Bewegungs-Ruck der Tiere
   animalPauseTime: 0.6,   // Sekunden Stopp nach einem Ruck (Ausweichen möglich)
+  spiderTrapTime: 2,      // Sekunden, die eine Spinne den Spieler im Netz festhält
 
   // --- Item-/Crafting-System (Claude) -------------------------------
   capacity: 20,           // Obergrenze pro Item-Sorte im Inventar
   backpackCapacity: 40,   // Obergrenze mit Rucksack
+  bulkCapacity: 9999,     // Obergrenze für Holz/Stein/Eisen/Gold/Diamant (siehe BULK_ITEMS)
   woodPerHit: 1,          // Holz pro Baum-Schlag mit bloßer Hand
   stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
-  orePerHit: 1,           // Erz/Gold/Diamant pro Schlag mit bloßer Hand
+  orePerHit: 1,           // Erz pro Schlag mit bloßer Hand (mit Spitzhacke deutlich mehr)
 
-  // Werkzeug-Stufen (Stufe 1 = Holz, 2 = Stein, 3 = Eisen, 4 = Gold, 5 = Diamant).
-  // Ertrag bzw. Schaden = Grundwert + Stufe * Bonus. Jede höhere Stufe sammelt
-  // also mehr / schlägt härter zu — welches Werkzeug welche Stufe hat, steht in
-  // der TOOLS-Tabelle weiter unten. (Stufen-Idee von Kimi, hier auf alle vier
-  // Werkzeugarten und fünf Materialien erweitert.)
-  axeWoodBonus: 2,        // Extra-Holz je Axt-Stufe
-  pickaxeStoneBonus: 2,   // Extra-Stein je Spitzhacken-Stufe
-  pickaxeOreBonus: 1,     // Extra-Erz/Gold/Diamant je Spitzhacken-Stufe
-  swordDamageBonus: 8,    // Extra-Schaden je Schwert-Stufe
-  spearDamageBonus: 12,   // Extra-Schaden je Speer-Stufe (stärker als das Schwert)
+  // Werkzeug-Stufen: Holz < Eisen < Gold — jede Stufe sammelt mehr
+  // bzw. schlägt härter zu als die vorherige.
+  axeWoodBonus: 2,        // Extra-Holz mit Holz-Axt
+  axeIronBonus: 4,        // Extra-Holz mit Eisen-Axt
+  axeGoldBonus: 7,        // Extra-Holz mit Gold-Axt
+  axeDiamondBonus: 11,    // Extra-Holz mit Diamant-Axt
+  pickaxeStoneBonus: 2,   // Extra-Eisenerz mit Holz-Spitzhacke (nur noch für Eisenerz genutzt)
+  pickaxeIronBonus: 4,    // Extra-Eisenerz mit Eisen-Spitzhacke
+  pickaxeGoldBonus: 7,    // Extra-Eisenerz mit Gold-Spitzhacke
+  pickaxeDiamondBonus: 11, // Extra-Eisenerz mit Diamant-Spitzhacke
+  swordDamageBonus: 12,   // Extra-Schaden mit Holz-Schwert
+  swordIronDamageBonus: 20, // Extra-Schaden mit Eisen-Schwert
+  swordGoldDamageBonus: 30, // Extra-Schaden mit Gold-Schwert
+  swordDiamondDamageBonus: 45, // Extra-Schaden mit Diamant-Schwert
+  spearDamageBonus: 20,   // Extra-Schaden mit Holz-Speer
+  spearIronDamageBonus: 32, // Extra-Schaden mit Eisen-Speer
+  spearGoldDamageBonus: 45, // Extra-Schaden mit Gold-Speer
+  spearDiamondDamageBonus: 65, // Extra-Schaden mit Diamant-Speer
   rawMeatFood: 25,        // Hunger durch rohes Fleisch (weniger als gebraten)
   cookedMeatFood: 40,     // Hunger durch gebratenes Fleisch
 
@@ -114,6 +154,33 @@ const CONFIG = {
   // Flüsse im Wald: begehbar, aber man läuft darin langsamer
   riverWidth: 170,          // Breite eines Flusses in Pixeln
   riverSpeedMultiplier: 0.55, // Geschwindigkeits-Faktor im Fluss (1 = normal)
+
+  // --- Strand-Biom (Beach) -------------------------------------------
+  // Der Strand ist ein schmaler Streifen zwischen Wald und Ozean (wie im
+  // Wiki: "the border between the forest and the ocean").
+  beachWidth: 1400,       // Breite des Strand-Streifens in Pixeln
+  beachSand: 260,         // Sand-Häufchen im Strand-Biom
+  sandPerHit: 1,          // Sand pro Schlag mit bloßer Hand
+  shovelSandBonus: 3,     // Extra-Sand mit der Schaufel
+
+  // Krabben (Strand-Tiere, nach Wiki-Vorlage)
+  crabCount: 52,           // Krabben am Strand (neutral, bis man sie angreift)
+  kingCrabCount: 12,       // Königskrabben am Strand (seltener, stärker)
+  crabSpearHealAmount: 40, // Heilung pro Treffer mit dem Krabbenspeer
+  spearCrabDamageBonus: 26, // Schaden-Bonus des Krabbenspeers (zwischen Holz- und Eisen-Speer)
+  crabStickFood: 20,       // Krabbenstäbchen: 5 Stück füllen den Hunger komplett (20% je Stück)
+  crabClawFood: 10,        // Krabbenscheren: 10% Hunger je Stück
+  crabHelmetDamageReduction: 5, // Krabbenhelm: pauschal weniger Schaden von allen Tieren
+  // ------------------------------------------------------------------
+
+  // --- Punkte-System (Leaderboard oben rechts) -----------------------
+  pointsWood: 1,          // Punkte pro gesammeltem Holz
+  pointsStone: 1,         // Punkte pro gesammeltem Stein
+  pointsIron: 5,          // Punkte pro Eisenerz
+  pointsGold: 10,         // Punkte pro Golderz
+  pointsDiamond: 100,     // Punkte pro Diamant
+  leaderboardSize: 5,     // Wie viele Spieler in der Rangliste stehen
+  // ------------------------------------------------------------------
 };
 
 // ---------- ITEMS: Katalog aller Gegenstände ----------
@@ -124,90 +191,87 @@ const CONFIG = {
 // "food: true" markiert Essbares (die man essen kann).
 const ITEMS = {
   // Rohstoffe
-  wood:        { name: "Holz",            icon: "🪵" },
-  stone:       { name: "Stein",           icon: "🪨" },
-  berry:       { name: "Beere",           icon: "🍓", food: true },
-  iron_ore:    { name: "Eisenerz",        icon: "⚙️" },
-  gold_ore:    { name: "Golderz",         icon: "🥇" },
-  diamond:     { name: "Diamant",         icon: "💎" },
+  wood:        { name: "Holz",            icon: "🪵", color: "#a9744f", flavor: "Riecht nach frischem Wald.",  type: "Sammeln", source: "Bäume im Wald oder Schnee fällen" },
+  stone:       { name: "Stein",           icon: "🪨", color: "#b5b5b5", flavor: "Fest und zuverlässig.",       type: "Sammeln", source: "Steine im Wald oder Schnee abbauen" },
+  berry:       { name: "Beere",           icon: "🍓", food: true, color: "#8e44ad", flavor: "Schmecken beerig gut!", type: "Sammeln", source: "Beerensträucher pflücken (wachsen nach)" },
+  iron_ore:    { name: "Eisenerz",        icon: "⚙️", color: "#8fa3ad", flavor: "Schwer in der Tasche.",       type: "Sammeln", source: "Eisenerz-Vorkommen abbauen" },
+  gold_ore:    { name: "Golderz",         icon: "🥇", color: "#e0b23e", flavor: "Glänzt verdächtig.",          type: "Sammeln", source: "Golderz-Vorkommen abbauen (braucht Spitzhacke)" },
+  diamond:     { name: "Diamant",         icon: "💎", color: "#63e6e8", flavor: "Selten und kostbar.",         type: "Sammeln", source: "Diamant-Vorkommen abbauen (braucht Gold-Spitzhacke)" },
+  sand:        { name: "Sand",            icon: "🏖️", image: "assets/sand.png", color: "#e3c98a", flavor: "Wie am Strand, zufälligerweise.", type: "Sammeln", source: "Sand am Strand abbauen" },
 
-  // Werkzeuge (ausrüstbar) — fünf Stufen pro Werkzeug:
-  //   Holz < Stein < Eisen < Gold < Diamant.
-  // "image" zeigt auf ein eigenes Icon-Bild statt des Emojis (icon bleibt
-  // als Fallback). Bisher gibt es Sprites nur für die Holz-Stufe; die
-  // höheren Stufen benutzen das Emoji.
-  wood_axe:        { name: "Holzaxt",        icon: "🪓", image: "assets/tool-axe.png",     tool: true },
-  stone_axe:       { name: "Steinaxt",       icon: "🪓", tool: true },
-  iron_axe:        { name: "Eisenaxt",       icon: "🪓", tool: true },
-  gold_axe:        { name: "Goldaxt",        icon: "🪓", tool: true },
-  diamond_axe:     { name: "Diamantaxt",     icon: "🪓", tool: true },
+  // Werkzeuge (ausrüstbar) — "image" zeigt auf ein eigenes Icon-Bild,
+  // das der Client statt des Emojis anzeigt (icon bleibt als Fallback).
+  // Vier Stufen pro Werkzeug: Holz < Eisen < Gold < Diamant — jede Stufe
+  // hat dieselbe Form wie das Holz-Werkzeug, nur in Material-Farbe.
+  axe:         { name: "Holz Axt",        icon: "🪓", image: "assets/tool-axe.png",     tool: true },
+  pickaxe:     { name: "Holz Spitzhacke", icon: "⛏️", image: "assets/tool-pickaxe.png", tool: true },
+  sword:       { name: "Holz Schwert",    icon: "🗡️", image: "assets/tool-sword.png",   tool: true },
+  spear:       { name: "Holz Speer",      icon: "🔱", image: "assets/tool-spear.png",   tool: true },
+  shovel:      { name: "Schaufel",        icon: "🥄", image: "assets/tool-shovel.png",  tool: true },
 
-  wood_pickaxe:    { name: "Holzspitzhacke",    icon: "⛏️", image: "assets/tool-pickaxe.png", tool: true },
-  stone_pickaxe:   { name: "Steinspitzhacke",   icon: "⛏️", tool: true },
-  iron_pickaxe:    { name: "Eisenspitzhacke",   icon: "⛏️", tool: true },
-  gold_pickaxe:    { name: "Goldspitzhacke",    icon: "⛏️", tool: true },
-  diamond_pickaxe: { name: "Diamantspitzhacke", icon: "⛏️", tool: true },
+  iron_axe:     { name: "Eisen Axt",        icon: "🪓", image: "assets/tool-axe-iron.png",     tool: true },
+  iron_pickaxe: { name: "Eisen Spitzhacke", icon: "⛏️", image: "assets/tool-pickaxe-iron.png", tool: true },
+  iron_sword:   { name: "Eisen Schwert",    icon: "🗡️", image: "assets/tool-sword-iron.png",   tool: true },
+  iron_spear:   { name: "Eisen Speer",      icon: "🔱", image: "assets/tool-spear-iron.png",   tool: true },
 
-  wood_sword:      { name: "Holzschwert",    icon: "🗡️", image: "assets/tool-sword.png", tool: true },
-  stone_sword:     { name: "Steinschwert",   icon: "🗡️", tool: true },
-  iron_sword:      { name: "Eisenschwert",   icon: "🗡️", tool: true },
-  gold_sword:      { name: "Goldschwert",    icon: "🗡️", tool: true },
-  diamond_sword:   { name: "Diamantschwert", icon: "🗡️", tool: true },
+  gold_axe:     { name: "Gold Axt",         icon: "🪓", image: "assets/tool-axe-gold.png",     tool: true },
+  gold_pickaxe: { name: "Gold Spitzhacke",  icon: "⛏️", image: "assets/tool-pickaxe-gold.png", tool: true },
+  gold_sword:   { name: "Gold Schwert",     icon: "🗡️", image: "assets/tool-sword-gold.png",   tool: true },
+  gold_spear:   { name: "Gold Speer",       icon: "🔱", image: "assets/tool-spear-gold.png",   tool: true },
 
-  wood_spear:      { name: "Holzspeer",      icon: "🔱", image: "assets/tool-spear.png", tool: true },
-  stone_spear:     { name: "Steinspeer",     icon: "🔱", tool: true },
-  iron_spear:      { name: "Eisenspeer",     icon: "🔱", tool: true },
-  gold_spear:      { name: "Goldspeer",      icon: "🔱", tool: true },
-  diamond_spear:   { name: "Diamantspeer",   icon: "🔱", tool: true },
+  diamond_axe:     { name: "Diamant Axt",        icon: "🪓", image: "assets/tool-axe-diamond.png",     tool: true },
+  diamond_pickaxe: { name: "Diamant Spitzhacke", icon: "⛏️", image: "assets/tool-pickaxe-diamond.png", tool: true },
+  diamond_sword:   { name: "Diamant Schwert",    icon: "🗡️", image: "assets/tool-sword-diamond.png",   tool: true },
+  diamond_spear:   { name: "Diamant Speer",      icon: "🔱", image: "assets/tool-spear-diamond.png",   tool: true },
 
   // Platzierbar / Upgrade
   campfire:    { name: "Lagerfeuer",      icon: "🔥" },
   backpack:    { name: "Rucksack",        icon: "🎒" },
 
-  // Tier-Drops (Fleisch fällt schon von Tieren; Felle/Seide sind Platzhalter
-  // für spätere Rezepte, z.B. warme Kleidung).
-  raw_meat:    { name: "Rohes Fleisch",   icon: "🥩", food: true },
-  cooked_meat: { name: "Gebratenes Fleisch", icon: "🍖", food: true },
-  rabbit_hide: { name: "Hasenfell",       icon: "🐇" },
-  wolf_fur:    { name: "Wolfsfell",       icon: "🐺" },
-  bear_fur:    { name: "Bärenfell",       icon: "🐻" },
-  spider_silk: { name: "Spinnenseide",    icon: "🕸️" },
+  // Tier-Drops (Fleisch fällt schon von Tieren; Felle sind für spätere
+  // Rezepte gedacht, z.B. warme Kleidung).
+  raw_meat:    { name: "Rohes Fleisch",   icon: "🥩", food: true, color: "#e0776b", flavor: "Noch blutig.", type: "Drop", source: "Fällt von getöteten Tieren" },
+  cooked_meat: { name: "Gebratenes Fleisch", icon: "🍖", food: true, color: "#c1440e", flavor: "Perfekt am Lagerfeuer gegart." },
+  rabbit_hide: { name: "Hasenfell",       icon: "🐇", color: "#f2a6c6", flavor: "Sorry, kleiner Hase.",          type: "Drop", source: "Fällt von Hasen" },
+  wolf_fur:    { name: "Wolfsfell",       icon: "🐺", color: "#c0392b", flavor: "Bitte nicht dem Rudel erzählen.", type: "Drop", source: "Fällt von Wölfen" },
+  winter_fur:  { name: "Winterfell",      icon: "🐻‍❄️", color: "#c0392b", flavor: "Kalt wie der Schnee, aus dem es kam.", type: "Drop", source: "Fällt von Polarfüchsen und Eisbären" },
+  mammoth_fur: { name: "Mammutfell",      icon: "🦣", color: "#a1662f", flavor: "Von einem echten Riesen.",     type: "Drop", source: "Fällt von Mammuts" },
+  spider_silk: { name: "Spinnenfaden",    icon: "🕸️", color: "#cfd8dc", flavor: "Kribbelig, aber nützlich.",    type: "Drop", source: "Fällt von Spinnen" },
+
+  // Krabben (Strand-Biom) — Drops, Waffe und Rüstung nach Wiki-Vorlage
+  crab_sticks: { name: "Krabbenstäbchen", icon: "🍢", image: "assets/crab-sticks.png", food: true, color: "#e6a15a", flavor: "Riecht nach Meer.", type: "Drop", source: "Fällt von Krabben" },
+  crab_claws:  { name: "Krabbenscheren",  icon: "🦞", image: "assets/crab-claws.png",  food: true, color: "#d9534f", flavor: "Vorsicht, kneift noch.", type: "Drop", source: "Fällt von Krabben" },
+  crab_spear:  { name: "Krabbenspeer",    icon: "🔱", image: "assets/tool-crab-spear.png", tool: true },
+  // "armor: true" markiert Rüstung (eigener Ausrüstungs-Platz, siehe equipArmor)
+  crab_helmet: { name: "Krabbenhelm",     icon: "🦀", image: "assets/crab-helmet.png", armor: true },
 };
 
 // ---------- RECIPES: Crafting-Rezepte ----------
 // Jedes Rezept: was es kostet (cost) und was dabei herauskommt (result).
 const RECIPES = {
-  // Werkzeug-Kette (Idee von Kimi): eine höhere Stufe braucht immer das
-  // Werkzeug der Vorstufe als Zutat + das jeweils neue Material. So arbeitet
-  // man sich Stück für Stück hoch: Holz → Stein → Eisen → Gold → Diamant.
+  axe:      { name: "Holz Axt",        cost: { wood: 3, stone: 3 },  result: { axe: 1 },      craftPoints: 100 },
+  pickaxe:  { name: "Holz Spitzhacke", cost: { wood: 3, stone: 5 },  result: { pickaxe: 1 },  craftPoints: 100 },
+  sword:    { name: "Holz Schwert",    cost: { wood: 4, stone: 4 },  result: { sword: 1 },    craftPoints: 100 },
+  spear:    { name: "Holz Speer",      cost: { wood: 5, stone: 5 },  result: { spear: 1 },    craftPoints: 100 },
 
-  // --- Äxte (geben Holz) ---
-  wood_axe:    { name: "Holzaxt",    cost: { wood: 3 },                              result: { wood_axe: 1 } },
-  stone_axe:   { name: "Steinaxt",   cost: { wood: 2, stone: 3, wood_axe: 1 },       result: { stone_axe: 1 } },
-  iron_axe:    { name: "Eisenaxt",   cost: { iron_ore: 3, stone: 2, stone_axe: 1 },  result: { iron_axe: 1 } },
-  gold_axe:    { name: "Goldaxt",    cost: { gold_ore: 3, iron_ore: 2, iron_axe: 1 }, result: { gold_axe: 1 } },
-  diamond_axe: { name: "Diamantaxt", cost: { diamond: 3, gold_ore: 2, gold_axe: 1 }, result: { diamond_axe: 1 } },
+  iron_axe:     { name: "Eisen Axt",        cost: { wood: 3, iron_ore: 4 }, result: { iron_axe: 1 },     craftPoints: 300 },
+  iron_pickaxe: { name: "Eisen Spitzhacke", cost: { wood: 3, iron_ore: 6 }, result: { iron_pickaxe: 1 }, craftPoints: 300 },
+  iron_sword:   { name: "Eisen Schwert",    cost: { wood: 4, iron_ore: 5 }, result: { iron_sword: 1 },   craftPoints: 300 },
+  iron_spear:   { name: "Eisen Speer",      cost: { wood: 5, iron_ore: 6 }, result: { iron_spear: 1 },   craftPoints: 300 },
 
-  // --- Spitzhacken (geben Stein, Erz, Gold, Diamant) ---
-  wood_pickaxe:    { name: "Holzspitzhacke",    cost: { wood: 3 },                                  result: { wood_pickaxe: 1 } },
-  stone_pickaxe:   { name: "Steinspitzhacke",   cost: { wood: 2, stone: 4, wood_pickaxe: 1 },       result: { stone_pickaxe: 1 } },
-  iron_pickaxe:    { name: "Eisenspitzhacke",   cost: { iron_ore: 4, stone: 2, stone_pickaxe: 1 },  result: { iron_pickaxe: 1 } },
-  gold_pickaxe:    { name: "Goldspitzhacke",    cost: { gold_ore: 4, iron_ore: 2, iron_pickaxe: 1 }, result: { gold_pickaxe: 1 } },
-  diamond_pickaxe: { name: "Diamantspitzhacke", cost: { diamond: 4, gold_ore: 2, gold_pickaxe: 1 }, result: { diamond_pickaxe: 1 } },
+  gold_axe:     { name: "Gold Axt",         cost: { wood: 3, gold_ore: 5 }, result: { gold_axe: 1 },     craftPoints: 1000 },
+  gold_pickaxe: { name: "Gold Spitzhacke",  cost: { wood: 3, gold_ore: 7 }, result: { gold_pickaxe: 1 }, craftPoints: 1000 },
+  gold_sword:   { name: "Gold Schwert",     cost: { wood: 4, gold_ore: 6 }, result: { gold_sword: 1 },   craftPoints: 1000 },
+  gold_spear:   { name: "Gold Speer",       cost: { wood: 5, gold_ore: 7 }, result: { gold_spear: 1 },   craftPoints: 1000 },
 
-  // --- Schwerter (Extra-Schaden gegen Tiere) ---
-  wood_sword:    { name: "Holzschwert",    cost: { wood: 3, stone: 2 },                       result: { wood_sword: 1 } },
-  stone_sword:   { name: "Steinschwert",   cost: { wood: 2, stone: 4, wood_sword: 1 },        result: { stone_sword: 1 } },
-  iron_sword:    { name: "Eisenschwert",   cost: { iron_ore: 4, wood: 2, stone_sword: 1 },    result: { iron_sword: 1 } },
-  gold_sword:    { name: "Goldschwert",    cost: { gold_ore: 4, wood: 2, iron_sword: 1 },     result: { gold_sword: 1 } },
-  diamond_sword: { name: "Diamantschwert", cost: { diamond: 4, wood: 2, gold_sword: 1 },      result: { diamond_sword: 1 } },
+  diamond_axe:     { name: "Diamant Axt",        cost: { wood: 3, diamond: 4 }, result: { diamond_axe: 1 },     craftPoints: 2500 },
+  diamond_pickaxe: { name: "Diamant Spitzhacke", cost: { wood: 3, diamond: 6 }, result: { diamond_pickaxe: 1 }, craftPoints: 2500 },
+  diamond_sword:   { name: "Diamant Schwert",    cost: { wood: 4, diamond: 5 }, result: { diamond_sword: 1 },   craftPoints: 2500 },
+  diamond_spear:   { name: "Diamant Speer",      cost: { wood: 5, diamond: 6 }, result: { diamond_spear: 1 },   craftPoints: 2500 },
 
-  // --- Speere (noch mehr Schaden als das Schwert, aber teurer) ---
-  wood_spear:    { name: "Holzspeer",    cost: { wood: 5, stone: 2 },                       result: { wood_spear: 1 } },
-  stone_spear:   { name: "Steinspeer",   cost: { wood: 3, stone: 5, wood_spear: 1 },        result: { stone_spear: 1 } },
-  iron_spear:    { name: "Eisenspeer",   cost: { iron_ore: 5, wood: 3, stone_spear: 1 },    result: { iron_spear: 1 } },
-  gold_spear:    { name: "Goldspeer",    cost: { gold_ore: 5, wood: 3, iron_spear: 1 },     result: { gold_spear: 1 } },
-  diamond_spear: { name: "Diamantspeer", cost: { diamond: 5, wood: 3, gold_spear: 1 },      result: { diamond_spear: 1 } },
+  shovel:      { name: "Schaufel",       cost: { wood: 3, stone: 3 },   result: { shovel: 1 }, craftPoints: 100 },
+  crab_spear:  { name: "Krabbenspeer",   cost: { wood: 5, crab_claws: 5, stone: 2 }, result: { crab_spear: 1 } },
+  crab_helmet: { name: "Krabbenhelm",    cost: { crab_claws: 10, crab_sticks: 10, stone: 6 }, result: { crab_helmet: 1 } },
 
   campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
   backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
@@ -220,42 +284,30 @@ const RECIPES = {
   },
 };
 
-// ---------- TOOLS: Art und Stufe der Werkzeuge (Idee von Kimi) ----------
-// kind  = wofür das Werkzeug gut ist (axe/pickaxe/sword/spear),
-// tier  = Stufe (1=Holz, 2=Stein, 3=Eisen, 4=Gold, 5=Diamant).
-// Höhere Stufe = mehr Ertrag bzw. Schaden pro Schlag (Formel in tryHit).
-// So muss tryHit nicht mehr jedes einzelne Werkzeug per Namen abfragen.
-const TOOLS = {
-  wood_axe:        { kind: "axe",     tier: 1 },
-  stone_axe:       { kind: "axe",     tier: 2 },
-  iron_axe:        { kind: "axe",     tier: 3 },
-  gold_axe:        { kind: "axe",     tier: 4 },
-  diamond_axe:     { kind: "axe",     tier: 5 },
-  wood_pickaxe:    { kind: "pickaxe", tier: 1 },
-  stone_pickaxe:   { kind: "pickaxe", tier: 2 },
-  iron_pickaxe:    { kind: "pickaxe", tier: 3 },
-  gold_pickaxe:    { kind: "pickaxe", tier: 4 },
-  diamond_pickaxe: { kind: "pickaxe", tier: 5 },
-  wood_sword:      { kind: "sword",   tier: 1 },
-  stone_sword:     { kind: "sword",   tier: 2 },
-  iron_sword:      { kind: "sword",   tier: 3 },
-  gold_sword:      { kind: "sword",   tier: 4 },
-  diamond_sword:   { kind: "sword",   tier: 5 },
-  wood_spear:      { kind: "spear",   tier: 1 },
-  stone_spear:     { kind: "spear",   tier: 2 },
-  iron_spear:      { kind: "spear",   tier: 3 },
-  gold_spear:      { kind: "spear",   tier: 4 },
-  diamond_spear:   { kind: "spear",   tier: 5 },
-};
-
-// ---------- Tier-Arten (von Kimi) ----------
+// ---------- Tier-Arten ----------
 // hostile: "never" = nie feindlich, "night" = nur nachts, "always" = immer.
 // meat = wie viele rohe Fleischstücke ein getötetes Tier fallen lässt.
+// furId/furAmount = welches Fell-/Faden-Item zusätzlich fällt.
+// special: "web" = fängt den Spieler beim Angriff kurz in einem Netz.
+// boss: true = Mini-Boss (sehr viel Leben + Schaden), taucht selten auf.
+// points = Leaderboard-Punkte für's Töten (schwerere/gefährlichere Tiere geben mehr).
 const ANIMAL_TYPES = {
-  rabbit: { biome: "forest", speed: 170, health: 20, damage: 0,  meat: 2, radius: 14, hostile: "never"  },
-  spider: { biome: "forest", speed: 180, health: 30, damage: 8,  meat: 1, radius: 14, hostile: "night"  },
-  wolf:   { biome: "forest", speed: 200, health: 40, damage: 10, meat: 2, radius: 18, hostile: "always" },
-  bear:   { biome: "snow",   speed: 180, health: 60, damage: 15, meat: 3, radius: 24, hostile: "always" },
+  rabbit:    { biome: "forest", speed: 170, health: 60,   damage: 0,  meat: 1, furId: "rabbit_hide", furAmount: 1,  radius: 14, hostile: "never",  points: 5 },
+  spider:    { biome: "forest", speed: 180, health: 120,  damage: 30, meat: 0, furId: "spider_silk", furAmount: 2,  radius: 14, hostile: "night",  special: "web", points: 15 },
+  wolf:      { biome: "forest", speed: 200, health: 300,  damage: 40, meat: 2, furId: "wolf_fur",    furAmount: 1,  radius: 18, hostile: "always", points: 25 },
+  arcticFox: { biome: "snow",   speed: 230, health: 300,  damage: 40, meat: 2, furId: "winter_fur",  furAmount: 1,  radius: 20, hostile: "always", points: 30 },
+  polarBear: { biome: "snow",   speed: 195, health: 900,  damage: 60, meat: 3, furId: "winter_fur",  furAmount: 2,  radius: 27, hostile: "always", points: 60 },
+  mammoth:   { biome: "snow",   speed: 240, health: 3000, damage: 90, meat: 7, furId: "mammoth_fur", furAmount: 10, radius: 55, hostile: "always", boss: true, points: 300 },
+
+  // Krabben (Strand) — nach Wiki: "neutral, wandert friedlich, bis sie
+  // angegriffen wird — dann genauso schnell wie ein Spieler mit Waffe".
+  // hostile: "onHit" ist ein eigener Typ (siehe updateAnimal): das Tier
+  // wird erst feindlich, nachdem es einmal getroffen wurde (animal.aggro).
+  // "drops" ersetzt hier meat/furId — Krabben lassen eigene Items fallen.
+  crab:      { biome: "beach",  speed: 240, health: 240,  damage: 35, meat: 0, radius: 22, hostile: "onHit", points: 20,
+               drops: { crab_sticks: 1, crab_claws: 1 } },
+  kingCrab:  { biome: "beach",  speed: 235, health: 600,  damage: 55, meat: 0, radius: 30, hostile: "onHit", points: 50,
+               drops: { crab_sticks: 4, crab_claws: 4 } },
 };
 
 const TICKS_PER_SECOND = 20;   // Wie oft pro Sekunde der Server rechnet
@@ -278,6 +330,19 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+// Welche Spitzhacken-Stufe hat der Spieler ausgerüstet? Index passend zu
+// den *YieldByTier-Tabellen in CONFIG: 0 = bloße Hand, 1 = Holz, 2 = Eisen,
+// 3 = Gold, 4 = Diamant.
+function pickaxeTier(equipped) {
+  switch (equipped) {
+    case "diamond_pickaxe": return 4;
+    case "gold_pickaxe": return 3;
+    case "iron_pickaxe": return 2;
+    case "pickaxe": return 1;
+    default: return 0;
+  }
+}
+
 // ---------- 3. STATISCHER DATEISERVER ----------
 // Liefert genau die drei Spieldateien aus. Die Liste ist absichtlich
 // fest eingetragen — so kann niemand andere Dateien vom Server laden.
@@ -289,10 +354,33 @@ const FILES = {
   "/assets/rabbit.png": ["assets/rabbit.png", "image/png"],
   "/assets/wolf.png": ["assets/wolf.png", "image/png"],
   "/assets/spider.png": ["assets/spider.png", "image/png"],
+  "/assets/arctic-fox.png": ["assets/arctic-fox.png", "image/png"],
+  "/assets/polar-bear.png": ["assets/polar-bear.png", "image/png"],
+  "/assets/mammoth.png": ["assets/mammoth.png", "image/png"],
   "/assets/tool-axe.png": ["assets/tool-axe.png", "image/png"],
   "/assets/tool-pickaxe.png": ["assets/tool-pickaxe.png", "image/png"],
   "/assets/tool-sword.png": ["assets/tool-sword.png", "image/png"],
   "/assets/tool-spear.png": ["assets/tool-spear.png", "image/png"],
+  "/assets/tool-axe-iron.png": ["assets/tool-axe-iron.png", "image/png"],
+  "/assets/tool-pickaxe-iron.png": ["assets/tool-pickaxe-iron.png", "image/png"],
+  "/assets/tool-sword-iron.png": ["assets/tool-sword-iron.png", "image/png"],
+  "/assets/tool-spear-iron.png": ["assets/tool-spear-iron.png", "image/png"],
+  "/assets/tool-axe-gold.png": ["assets/tool-axe-gold.png", "image/png"],
+  "/assets/tool-pickaxe-gold.png": ["assets/tool-pickaxe-gold.png", "image/png"],
+  "/assets/tool-sword-gold.png": ["assets/tool-sword-gold.png", "image/png"],
+  "/assets/tool-spear-gold.png": ["assets/tool-spear-gold.png", "image/png"],
+  "/assets/tool-axe-diamond.png": ["assets/tool-axe-diamond.png", "image/png"],
+  "/assets/tool-pickaxe-diamond.png": ["assets/tool-pickaxe-diamond.png", "image/png"],
+  "/assets/tool-sword-diamond.png": ["assets/tool-sword-diamond.png", "image/png"],
+  "/assets/tool-spear-diamond.png": ["assets/tool-spear-diamond.png", "image/png"],
+  "/assets/crab.png": ["assets/crab.png", "image/png"],
+  "/assets/king-crab.png": ["assets/king-crab.png", "image/png"],
+  "/assets/tool-shovel.png": ["assets/tool-shovel.png", "image/png"],
+  "/assets/tool-crab-spear.png": ["assets/tool-crab-spear.png", "image/png"],
+  "/assets/crab-helmet.png": ["assets/crab-helmet.png", "image/png"],
+  "/assets/crab-claws.png": ["assets/crab-claws.png", "image/png"],
+  "/assets/crab-sticks.png": ["assets/crab-sticks.png", "image/png"],
+  "/assets/sand.png": ["assets/sand.png", "image/png"],
 };
 
 const server = http.createServer((req, res) => {
@@ -323,10 +411,15 @@ const server = http.createServer((req, res) => {
 //   unten rechts:   Ozean (Wasser — darf nicht betreten werden)
 // Die Farbe schickt der Server beim Beitritt an die Browser zum Zeichnen.
 const half = CONFIG.worldSize / 2;
+// Der Strand ist ein schmaler Streifen genau an der Grenze zwischen Wald
+// (links) und Ozean (rechts) — daher rücken beide etwas zusammen, damit
+// der Strand dazwischenpasst, ohne dass irgendwo eine Lücke entsteht.
+const beachHalf = CONFIG.beachWidth / 2;
 const BIOMES = [
-  { name: "snow",   color: "#eef4fa", x: 0,    y: 0,    w: CONFIG.worldSize, h: half },
-  { name: "forest", color: "#5fae2d", x: 0,    y: half, w: half, h: half },
-  { name: "ocean",  color: "#2196d8", x: half, y: half, w: half, h: half },
+  { name: "snow",   color: "#eef4fa", x: 0,               y: 0,    w: CONFIG.worldSize,        h: half },
+  { name: "forest", color: "#5fae2d", x: 0,               y: half, w: half - beachHalf,         h: half },
+  { name: "beach",  color: "#e8d190", x: half - beachHalf, y: half, w: CONFIG.beachWidth,        h: half },
+  { name: "ocean",  color: "#2196d8", x: half + beachHalf, y: half, w: half - beachHalf,         h: half },
 ];
 
 // Flüsse: begehbare, aber langsamere Wasser-Streifen im Wald-Biom.
@@ -412,31 +505,51 @@ function createWorld() {
     resources.push({ type: "tree", x: pos.x, y: pos.y, radius: rand(38, 55) });
   }
 
-  // Steine (Wald + Schnee)
+  // Steine (Wald + Schnee) — begrenzter Vorrat, der mit der Zeit nachwächst
   for (let i = 0; i < CONFIG.forestRocks + CONFIG.snowRocks; i++) {
     const biome = i < CONFIG.forestRocks ? forest : snow;
     const pos = randInBiome(biome, 60);
-    resources.push({ type: "rock", x: pos.x, y: pos.y, radius: rand(26, 38) });
+    resources.push({
+      type: "rock", x: pos.x, y: pos.y, radius: rand(26, 38),
+      amount: CONFIG.stoneMaxAmount, maxAmount: CONFIG.stoneMaxAmount, oreRegrowTimer: 0,
+    });
   }
 
-  // Eisenerz (viel im Wald, wenig im Schnee)
+  // Eisenerz (viel im Wald, wenig im Schnee) — unbegrenzt, wie gehabt
   for (let i = 0; i < CONFIG.forestIronOre + CONFIG.snowIronOre; i++) {
     const biome = i < CONFIG.forestIronOre ? forest : snow;
     const pos = randInBiome(biome, 60);
     resources.push({ type: "iron_ore", x: pos.x, y: pos.y, radius: rand(24, 34) });
   }
 
-  // Golderz (viel im Schnee, wenig im Wald)
+  // Golderz (viel im Schnee, wenig im Wald) — begrenzter Vorrat, wächst nach
   for (let i = 0; i < CONFIG.snowGoldOre + CONFIG.forestGoldOre; i++) {
     const biome = i < CONFIG.snowGoldOre ? snow : forest;
     const pos = randInBiome(biome, 60);
-    resources.push({ type: "gold_ore", x: pos.x, y: pos.y, radius: rand(24, 34) });
+    resources.push({
+      type: "gold_ore", x: pos.x, y: pos.y, radius: rand(24, 34),
+      amount: CONFIG.goldMaxAmount, maxAmount: CONFIG.goldMaxAmount, oreRegrowTimer: 0,
+    });
   }
 
-  // Diamanten (von Kimi): nur im Schnee, die seltenste und wertvollste Ressource
+  // Diamant — wie im Wiki NUR im Schnee-Biom (dort auch nur an wenigen
+  // Stellen, deutlich seltener als Gold). 20% der Vorkommen sind "groß":
+  // mehr Vorrat und doppelt so schnelles Nachwachsen.
   for (let i = 0; i < CONFIG.snowDiamond; i++) {
     const pos = randInBiome(snow, 60);
-    resources.push({ type: "diamond", x: pos.x, y: pos.y, radius: rand(20, 28) });
+    const large = Math.random() < CONFIG.diamondLargeChance;
+    const maxAmount = large ? CONFIG.diamondMaxAmount * 2 : CONFIG.diamondMaxAmount;
+    resources.push({
+      type: "diamond", x: pos.x, y: pos.y, radius: rand(24, 34),
+      amount: maxAmount, maxAmount, large, oreRegrowTimer: 0,
+    });
+  }
+
+  // Sand-Häufchen (Strand) — mit der Schaufel abbaubar, unbegrenzt wie Bäume
+  const beach = BIOMES.find((b) => b.name === "beach");
+  for (let i = 0; i < CONFIG.beachSand; i++) {
+    const pos = randInBiome(beach, 40);
+    resources.push({ type: "sand_pile", x: pos.x, y: pos.y, radius: rand(18, 26) });
   }
 
   // Beerensträucher (Wald + Schnee)
@@ -492,6 +605,9 @@ function spawnAnimals() {
         wanderTimer: 0,                     // wann die Richtung wieder wechselt
         // Zufallsstart im Ruck/Stopp-Zyklus, damit nicht alle im Gleichtakt rucken
         impulseTimer: rand(0, CONFIG.animalMoveTime + CONFIG.animalPauseTime),
+        // Nur für hostile: "onHit" (Krabben) genutzt: erst nach einem Treffer
+        // feindlich, siehe tryHit() und updateAnimal().
+        aggro: false,
       });
     }
   }
@@ -502,6 +618,11 @@ function worldForClient() {
   return resources.map((res) => {
     const r = { type: res.type, x: Math.round(res.x), y: Math.round(res.y), radius: Math.round(res.radius) };
     if (res.type === "bush") r.berries = res.berries;
+    if (res.type === "rock" || res.type === "gold_ore" || res.type === "diamond") {
+      r.amount = res.amount;
+      r.maxAmount = res.maxAmount;
+      if (res.large) r.large = true;
+    }
     return r;
   });
 }
@@ -515,6 +636,10 @@ let nextPlayerId = 1;
 
 // Busch-Nummern, deren Beerenstand sich seit dem letzten Senden geändert hat
 const changedBushes = new Set();
+// Erz-Nummern (Stein/Gold/Diamant), deren Vorrat sich seit dem letzten
+// Senden geändert hat (abgebaut oder nachgewachsen) — gleiches Prinzip wie
+// changedBushes, nur für Erz-Vorkommen.
+const changedOres = new Set();
 
 // ---------- STRUKTUREN (vom Spieler platziert, z.B. Lagerfeuer) ----------
 // Bewusst ein EIGENES Array (nicht `resources`, das ist der Biom-/Karten-Teil),
@@ -545,9 +670,12 @@ function addPlayer(id, name) {
     cold: 0,            // Wie sehr der Spieler friert (0 = warm, 100 = erfriert)
     inventory: {},      // Item-Sorte (id) -> Anzahl, z.B. { wood: 3, axe: 1 }
     equipped: null,     // Welches Werkzeug gerade in der Hand ist (id oder null)
+    armor: null,        // Angelegte Rüstung, z.B. "crab_helmet" (id oder null)
     hitTimer: 0,        // Zeit bis zum nächsten möglichen Schlag
     dead: false,
+    trapped: 0,         // Sekunden, die der Spieler noch im Spinnennetz feststeckt
     survivalTime: 0,    // Wie lange der Spieler schon lebt (Sekunden)
+    score: 0,           // Leaderboard-Punkte (bleiben auch nach dem Tod erhalten)
     input: { up: false, down: false, left: false, right: false },
   });
 }
@@ -562,7 +690,9 @@ function resetPlayer(player) {
   player.cold = 0;
   player.inventory = {};
   player.equipped = null;
+  player.armor = null;
   player.hitTimer = 0;
+  player.trapped = 0;
   player.dead = false;
   player.survivalTime = 0;
 }
@@ -573,15 +703,22 @@ function countItem(player, id) {
   return player.inventory[id] || 0;
 }
 
-// Die aktuelle Obergrenze pro Item-Sorte (mit Rucksack höher)
-function capacityFor(player) {
+// Rohstoffe, die man in großen Mengen horten kann (Stacks bis 9999) —
+// alles andere (Fleisch, Beeren, Werkzeuge, Felle ...) bleibt bei der
+// normalen Obergrenze (capacity/backpackCapacity).
+const BULK_ITEMS = new Set(["wood", "stone", "iron_ore", "gold_ore", "diamond"]);
+
+// Die aktuelle Obergrenze pro Item-Sorte (mit Rucksack höher; Holz, Stein,
+// Erze und Diamant haben einen eigenen, viel höheren Stack-Deckel).
+function capacityFor(player, id) {
+  if (BULK_ITEMS.has(id)) return CONFIG.bulkCapacity;
   return countItem(player, "backpack") > 0 ? CONFIG.backpackCapacity : CONFIG.capacity;
 }
 
 // Ein Item hinzufügen, aber nie über die Obergrenze hinaus.
 // Gibt zurück, wie viel wirklich Platz gefunden hat.
 function giveItem(player, id, n) {
-  const max = capacityFor(player);
+  const max = capacityFor(player, id);
   const have = countItem(player, id);
   const room = Math.max(0, max - have);
   const added = Math.min(n, room);
@@ -653,14 +790,11 @@ function craft(player, recipeId) {
   if (recipe.requiresNear === "campfire" && !nearCampfire(player.x, player.y)) return;
 
   takeItems(player, recipe.cost);
-  // Das verbrauchte Werkzeug der Vorstufe (z.B. Holzaxt beim Bau der Steinaxt)
-  // aus der Hand legen, falls es gerade ausgerüstet und nun aufgebraucht ist.
-  if (player.equipped && countItem(player, player.equipped) <= 0) {
-    player.equipped = null;
-  }
   for (const id in recipe.result) {
     giveItem(player, id, recipe.result[id]);
   }
+  // Leaderboard-Punkte fürs Craften (nur Werkzeug-Stufen, siehe craftPoints)
+  if (recipe.craftPoints) player.score += recipe.craftPoints;
 }
 
 // Ein Werkzeug in die Hand nehmen (oder mit null weglegen)
@@ -672,6 +806,18 @@ function equip(player, toolId) {
   // Nur ausrüsten, was ein Werkzeug ist UND im Inventar liegt
   if (ITEMS[toolId] && ITEMS[toolId].tool && countItem(player, toolId) > 0) {
     player.equipped = toolId;
+  }
+}
+
+// Rüstung anlegen/ablegen (eigener Ausrüstungs-Platz neben dem Werkzeug,
+// z.B. der Krabbenhelm — siehe ITEMS: "armor: true").
+function equipArmor(player, itemId) {
+  if (itemId === null) {
+    player.armor = null;
+    return;
+  }
+  if (ITEMS[itemId] && ITEMS[itemId].armor && countItem(player, itemId) > 0) {
+    player.armor = itemId;
   }
 }
 
@@ -707,10 +853,16 @@ function update(dt) {
 
     // --- Bewegung (aus den gemerkten Tasten des Spielers) ---
     let dx = 0, dy = 0;
-    if (player.input.up) dy -= 1;
-    if (player.input.down) dy += 1;
-    if (player.input.left) dx -= 1;
-    if (player.input.right) dx += 1;
+
+    // Im Spinnennetz gefangen: Zeit runterzählen, keine Bewegung möglich
+    if (player.trapped > 0) {
+      player.trapped = Math.max(0, player.trapped - dt);
+    } else {
+      if (player.input.up) dy -= 1;
+      if (player.input.down) dy += 1;
+      if (player.input.left) dx -= 1;
+      if (player.input.right) dx += 1;
+    }
 
     // Diagonal nicht schneller laufen
     if (dx !== 0 && dy !== 0) {
@@ -864,6 +1016,26 @@ function update(dt) {
     }
   }
 
+  // --- Erz-Vorkommen wachsen nach (Stein, Gold, Diamant) ---
+  // Jedes Vorkommen hat einen begrenzten Vorrat (amount/maxAmount), der sich
+  // alle CONFIG.oreRegenInterval Sekunden um einen Zufallsbetrag auffüllt —
+  // genau wie im Wiki beschrieben ("wächst alle 10 Sekunden nach").
+  for (let i = 0; i < resources.length; i++) {
+    const res = resources[i];
+    if (res.type !== "rock" && res.type !== "gold_ore" && res.type !== "diamond") continue;
+    if (res.amount >= res.maxAmount) continue;
+    res.oreRegrowTimer += dt;
+    if (res.oreRegrowTimer >= CONFIG.oreRegenInterval) {
+      res.oreRegrowTimer = 0;
+      let regenAmt;
+      if (res.type === "rock") regenAmt = Math.round(rand(CONFIG.stoneRegenMin, CONFIG.stoneRegenMax));
+      else if (res.type === "gold_ore") regenAmt = Math.round(rand(CONFIG.goldRegenMin, CONFIG.goldRegenMax));
+      else regenAmt = Math.round(rand(CONFIG.diamondRegenMin, CONFIG.diamondRegenMax)) * (res.large ? 2 : 1);
+      res.amount = Math.min(res.maxAmount, res.amount + Math.max(1, regenAmt));
+      changedOres.add(i);
+    }
+  }
+
   // --- Lagerfeuer brennen herunter; ausgebrannte werden entfernt ---
   for (let i = structures.length - 1; i >= 0; i--) {
     const s = structures[i];
@@ -915,6 +1087,7 @@ function updateAnimal(animal, dt) {
       animal.y = pos.y;
       animal.health = type.health;
       animal.dead = false;
+      animal.aggro = false;
     }
     return;
   }
@@ -936,8 +1109,11 @@ function updateAnimal(animal, dt) {
     }
   }
 
-  // Ist das Tier gerade feindlich? (Spinnen nur nachts!)
-  const hostile = type.hostile === "always" || (type.hostile === "night" && isNight());
+  // Ist das Tier gerade feindlich? (Spinnen nur nachts! Krabben erst,
+  // nachdem sie einmal getroffen wurden — siehe animal.aggro in tryHit())
+  const hostile = type.hostile === "always"
+    || (type.hostile === "night" && isNight())
+    || (type.hostile === "onHit" && animal.aggro);
 
   if (hostile && nearest && nearestDist < CONFIG.aggroRange) {
     // Feindlich: zum Spieler laufen und beißen
@@ -946,10 +1122,29 @@ function updateAnimal(animal, dt) {
       moveAnimal(animal, angle, type.speed, dt);
     } else if (animal.attackTimer <= 0) {
       animal.attackTimer = 1; // eine Sekunde Sperre zwischen zwei Bissen
-      nearest.health -= type.damage;
-      if (nearest.health <= 0) {
-        nearest.health = 0;
-        nearest.dead = true;
+
+      // Krabbenhelm: Krabben greifen den Träger gar nicht an (wie im Wiki:
+      // "won't attack you"), gegen alle anderen Tiere schützt der Helm nur
+      // pauschal etwas (crabHelmetDamageReduction).
+      const isCrab = animal.species === "crab" || animal.species === "kingCrab";
+      const crabSafe = isCrab && nearest.armor === "crab_helmet";
+
+      if (!crabSafe) {
+        let dmg = type.damage;
+        if (nearest.armor === "crab_helmet") {
+          dmg = Math.max(0, dmg - CONFIG.crabHelmetDamageReduction);
+        }
+        nearest.health -= dmg;
+
+        // Spinnen fangen den Spieler kurz in ihrem Netz — er kann sich
+        // währenddessen nicht bewegen (siehe Bewegung in update())
+        if (type.special === "web") {
+          nearest.trapped = CONFIG.spiderTrapTime;
+        }
+        if (nearest.health <= 0) {
+          nearest.health = 0;
+          nearest.dead = true;
+        }
       }
     }
   } else if (animal.species === "rabbit" && nearest && nearestDist < CONFIG.fleeRange) {
@@ -1003,24 +1198,47 @@ function tryHit(player) {
     }
   }
 
-  // Art + Stufe des ausgerüsteten Werkzeugs (tier 0 = bloße Hand).
-  // Aus der TOOLS-Tabelle statt vieler Namensabfragen (Kimis Idee).
-  const tool = player.equipped ? TOOLS[player.equipped] : null;
-  const toolKind = tool ? tool.kind : null;
-  const toolTier = tool ? tool.tier : 0;
-
-  // Ein Tier getroffen: es verliert Leben und lässt rohes Fleisch fallen.
-  // Schwert und Speer geben Extra-Schaden (Speer mehr), je höher die Stufe.
+  // Ein Tier getroffen: es verliert Leben und lässt Beute fallen (rohes
+  // Fleisch/Fell oder — bei Krabben — eigene Drops). Mit ausgerüstetem
+  // Speer richtet der Schlag mehr Schaden an.
   if (closestAnimal) {
     const type = ANIMAL_TYPES[closestAnimal.species];
+    const isCrab = closestAnimal.species === "crab" || closestAnimal.species === "kingCrab";
+
+    // Krabbenspeer auf eine bereits feindliche Krabbe: statt Schaden wird
+    // sie beruhigt (aggro=false) und geheilt — wie im Wiki: "calm down
+    // aggressive crabs" und "heal the crabs ... with the spear".
+    if (isCrab && player.equipped === "crab_spear" && closestAnimal.aggro) {
+      closestAnimal.aggro = false;
+      closestAnimal.health = Math.min(type.health, closestAnimal.health + CONFIG.crabSpearHealAmount);
+      return;
+    }
+
+    // Neutrale Krabbe wird durch JEDEN Treffer feindlich (wie im Wiki:
+    // "wander around peacefully until they are attacked by a player").
+    if (type.hostile === "onHit") closestAnimal.aggro = true;
+
     let damage = CONFIG.playerDamage;
-    if (toolKind === "sword") damage += toolTier * CONFIG.swordDamageBonus;
-    else if (toolKind === "spear") damage += toolTier * CONFIG.spearDamageBonus;
+    if (player.equipped === "spear") damage += CONFIG.spearDamageBonus;
+    else if (player.equipped === "iron_spear") damage += CONFIG.spearIronDamageBonus;
+    else if (player.equipped === "gold_spear") damage += CONFIG.spearGoldDamageBonus;
+    else if (player.equipped === "diamond_spear") damage += CONFIG.spearDiamondDamageBonus;
+    else if (player.equipped === "crab_spear") damage += CONFIG.spearCrabDamageBonus;
+    else if (player.equipped === "sword") damage += CONFIG.swordDamageBonus;
+    else if (player.equipped === "iron_sword") damage += CONFIG.swordIronDamageBonus;
+    else if (player.equipped === "gold_sword") damage += CONFIG.swordGoldDamageBonus;
+    else if (player.equipped === "diamond_sword") damage += CONFIG.swordDiamondDamageBonus;
     closestAnimal.health -= damage;
     if (closestAnimal.health <= 0) {
       closestAnimal.dead = true;
       closestAnimal.respawnTimer = CONFIG.animalRespawn;
-      giveItem(player, "raw_meat", type.meat);
+      if (type.meat > 0) giveItem(player, "raw_meat", type.meat);
+      if (type.furId && type.furAmount > 0) giveItem(player, type.furId, type.furAmount);
+      if (type.drops) {
+        for (const dropId in type.drops) giveItem(player, dropId, type.drops[dropId]);
+      }
+      // Leaderboard-Punkte fürs Töten (siehe points je Tierart)
+      player.score += type.points || 0;
     }
     return;
   }
@@ -1028,18 +1246,64 @@ function tryHit(player) {
   if (!closest) return;
 
   if (closest.type === "tree") {
-    // Axt: je Stufe mehr Holz
-    const amount = CONFIG.woodPerHit + (toolKind === "axe" ? toolTier * CONFIG.axeWoodBonus : 0);
-    giveItem(player, "wood", amount);
+    // Mit Axt gibt's mehr Holz — Eisen mehr als Holz, Gold mehr als Eisen, Diamant am meisten
+    let amount = CONFIG.woodPerHit;
+    if (player.equipped === "axe") amount += CONFIG.axeWoodBonus;
+    else if (player.equipped === "iron_axe") amount += CONFIG.axeIronBonus;
+    else if (player.equipped === "gold_axe") amount += CONFIG.axeGoldBonus;
+    else if (player.equipped === "diamond_axe") amount += CONFIG.axeDiamondBonus;
+    const addedWood = giveItem(player, "wood", amount);
+    player.score += addedWood * CONFIG.pointsWood;
   } else if (closest.type === "rock") {
-    // Spitzhacke: je Stufe mehr Stein
-    const amount = CONFIG.stonePerHit + (toolKind === "pickaxe" ? toolTier * CONFIG.pickaxeStoneBonus : 0);
-    giveItem(player, "stone", amount);
-  } else if (closest.type === "iron_ore" || closest.type === "gold_ore" || closest.type === "diamond") {
-    // Erz, Gold und Diamant: je Spitzhacken-Stufe mehr. Das Item heißt genau
-    // wie der Ressourcen-Typ (iron_ore / gold_ore / diamond).
-    const amount = CONFIG.orePerHit + (toolKind === "pickaxe" ? toolTier * CONFIG.pickaxeOreBonus : 0);
-    giveItem(player, closest.type, amount);
+    // Stein: mit JEDER Spitzhacke abbaubar (auch bloße Hand), aber höhere
+    // Spitzhacken-Stufen holen mehr pro Schlag (1/1/2/3/4, siehe CONFIG).
+    // Das Vorkommen hat einen begrenzten Vorrat, der nachwächst.
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.stoneYieldByTier[tier], closest.amount);
+    const added = giveItem(player, "stone", wanted);
+    if (added > 0) {
+      closest.amount -= added;
+      changedOres.add(closestIndex);
+      player.score += added * CONFIG.pointsStone;
+    }
+  } else if (closest.type === "iron_ore") {
+    // Erz abbauen profitiert genauso von der Spitzhacke wie Stein
+    let amount = CONFIG.orePerHit;
+    if (player.equipped === "pickaxe") amount += CONFIG.pickaxeStoneBonus;
+    else if (player.equipped === "iron_pickaxe") amount += CONFIG.pickaxeIronBonus;
+    else if (player.equipped === "gold_pickaxe") amount += CONFIG.pickaxeGoldBonus;
+    else if (player.equipped === "diamond_pickaxe") amount += CONFIG.pickaxeDiamondBonus;
+    const addedIron = giveItem(player, "iron_ore", amount);
+    player.score += addedIron * CONFIG.pointsIron;
+  } else if (closest.type === "gold_ore") {
+    // Gold: braucht mindestens eine Spitzhacke (bloße Hand bekommt nichts) —
+    // wie im Wiki: "gathered with a stone pickaxe or higher".
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.goldYieldByTier[tier], closest.amount);
+    const added = giveItem(player, "gold_ore", wanted);
+    if (added > 0) {
+      closest.amount -= added;
+      changedOres.add(closestIndex);
+      player.score += added * CONFIG.pointsGold;
+    }
+  } else if (closest.type === "diamond") {
+    // Diamant: braucht mindestens eine Gold-Spitzhacke — wie im Wiki:
+    // "can gather it with only a gold or above pickaxe".
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.diamondYieldByTier[tier], closest.amount);
+    const added = giveItem(player, "diamond", wanted);
+    if (added > 0) {
+      closest.amount -= added;
+      changedOres.add(closestIndex);
+      player.score += added * CONFIG.pointsDiamond;
+    }
+  } else if (closest.type === "sand_pile") {
+    // Sand: mit der Schaufel gibt's mehr, wie im Wiki ("using a shovel,
+    // you can harvest sand"). Unbegrenzt, wie Bäume — kein Vorrat, der
+    // ausgehen könnte.
+    let amount = CONFIG.sandPerHit;
+    if (player.equipped === "shovel") amount += CONFIG.shovelSandBonus;
+    giveItem(player, "sand", amount);
   } else if (closest.type === "bush" && closest.berries > 0) {
     const added = giveItem(player, "berry", 1);
     if (added > 0) {
@@ -1059,13 +1323,14 @@ function tryHit(player) {
 //   { t: "eat", item: "berry" (optional) }  Essen (bestimmtes oder bestes)
 //   { t: "craft", recipe: "axe" }           Ein Rezept bauen
 //   { t: "equip", tool: "axe"|null }         Werkzeug ausrüsten / weglegen
+//   { t: "equipArmor", item: "crab_helmet"|null }  Rüstung anlegen / ablegen
 //   { t: "place", item: "campfire" }        Etwas platzieren (Lagerfeuer)
 //   { t: "respawn" }                        Nach dem Tod neu starten
 //
 // Server -> Browser:
 //   { t: "welcome", id, config, items, recipes, world }   Begrüßung + Kataloge
 //                 (config enthält u.a. biomes für den Hintergrund)
-//   { t: "state", players, bushes, animals, night, structures }
+//   { t: "state", players, bushes, ores, animals, night, structures }
 //                 Spielstand (TICKS_PER_SECOND-mal/s); jeder Spieler mit
 //                 health, hunger, cold, inventory {id->Anzahl} + equipped
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
@@ -1105,8 +1370,11 @@ function stateMessage() {
       cold: Math.round(p.cold),
       inventory: p.inventory,
       equipped: p.equipped,
+      armor: p.armor,
       dead: p.dead,
+      trapped: p.trapped > 0,
       survivalTime: Math.floor(p.survivalTime),
+      score: Math.round(p.score || 0),
     });
   }
 
@@ -1116,6 +1384,14 @@ function stateMessage() {
     bushList.push([index, resources[index].berries]);
   }
   changedBushes.clear();
+
+  // Nur die Erz-Vorkommen mitschicken, deren Vorrat sich geändert hat
+  // (abgebaut oder nachgewachsen): [Nummer, aktueller Vorrat]
+  const oreList = [];
+  for (const index of changedOres) {
+    oreList.push([index, resources[index].amount]);
+  }
+  changedOres.clear();
 
   // Nur lebende Tiere mitschicken (tote tauchen erst nach dem Respawn wieder auf)
   const animalList = [];
@@ -1145,6 +1421,7 @@ function stateMessage() {
     t: "state",
     players: playerList,
     bushes: bushList,
+    ores: oreList,
     animals: animalList,
     night: isNight(),
     structures: structureList,
@@ -1185,6 +1462,7 @@ wss.on("connection", (ws) => {
           maxHealth: CONFIG.maxHealth,
           maxHunger: CONFIG.maxHunger,
           capacity: CONFIG.capacity,
+          leaderboardSize: CONFIG.leaderboardSize,
           biomes: BIOMES,   // Biom-Rechtecke inkl. Farbe (zum Zeichnen + Minimap)
           rivers: RIVERS,   // Fluss-Linien inkl. Breite (zum Zeichnen)
         },
@@ -1219,6 +1497,9 @@ wss.on("connection", (ws) => {
     } else if (msg.t === "equip") {
       // tool ist entweder ein Item-Name (String) oder null (weglegen)
       if (msg.tool === null || typeof msg.tool === "string") equip(player, msg.tool);
+    } else if (msg.t === "equipArmor") {
+      // item ist entweder ein Item-Name (String) oder null (ablegen)
+      if (msg.item === null || typeof msg.item === "string") equipArmor(player, msg.item);
     } else if (msg.t === "place") {
       if (typeof msg.item === "string") placeItem(player, msg.item);
     } else if (msg.t === "respawn") {

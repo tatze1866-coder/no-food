@@ -12,15 +12,22 @@
   <!-- Anzeige oben links: Inventar (wird vom Spiel dynamisch gefüllt) -->
   <div id="inventory"></div>
 
-  <!-- Anzeige unten: Lebens-, Hunger- und Kältebalken -->
+  <!-- Anzeige unten: Lebens-, Hunger- und Kältebalken, nebeneinander -->
   <div id="bars">
     <div class="bar"><div id="health-fill" class="fill health"></div><span class="bar-label">❤️ Leben</span></div>
     <div class="bar"><div id="hunger-fill" class="fill hunger"></div><span class="bar-label">🍖 Hunger</span></div>
-    <div class="bar"><div id="cold-fill" class="fill cold"></div><span class="bar-label">❄️ Kälte</span></div>
+    <!-- Kältebalken: nur sichtbar, solange wirklich Kälte da ist (siehe updateHUD) -->
+    <div id="cold-bar" class="bar hidden"><div id="cold-fill" class="fill cold"></div><span class="bar-label">❄️ Kälte</span></div>
   </div>
+
+  <!-- Anzeige oben rechts: Rangliste (Punkte fürs Sammeln + Tiere töten) -->
+  <div id="leaderboard"></div>
 
   <!-- Anzeige oben rechts: Mitspieler -->
   <div id="player-count">0 Spieler online</div>
+
+  <!-- Item-Info-Karte (erscheint beim Hovern über ein Item, Wiki-Optik) -->
+  <div id="item-tooltip" class="hidden"></div>
 
   <!-- Crafting-Knopf oben rechts (öffnet/schließt das Bau-Menü) -->
   <button id="craft-toggle">🔨 Bauen (C)</button>

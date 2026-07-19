@@ -56,10 +56,17 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 
 ## Spielregeln
 
-- 🗺️ Die Karte hat drei **Biome**: **Wald** (unten links, hier startest du),
-  **Schnee** (oben — karg, aber mehr Steine) und **Ozean** (unten rechts —
-  nicht begehbar)
+- 🗺️ Die Karte hat vier **Biome**: **Wald** (unten links, hier startest du),
+  **Schnee** (oben — karg, aber mehr Steine), **Strand** (schmaler Streifen
+  zwischen Wald und Ozean — hier gibt's Sand und Krabben) und **Ozean**
+  (unten rechts — nicht begehbar)
 - 🏞️ Durch den **Wald** fließt ein **Fluss** — darin läufst du langsamer
+- 🦀 **Krabben** (Strand) sind zunächst neutral — greifst du sie an, werden
+  sie so schnell wie du und feindlich. Sie geben Krabbenstäbchen und
+  -scheren (beides Essen). Mit **Schaufel** (Hotbar) lässt sich **Sand**
+  abbauen; aus Krabbenscheren/-stäbchen lassen sich **Krabbenspeer**
+  (beruhigt/heilt Krabben) und **Krabbenhelm** (Rüstung, Krabben greifen
+  dich damit nicht mehr an) craften
 - 🌳 **Bäume** schlagen gibt **Holz**
 - 🐇 **Hasen** (Wald) sind harmlos und fliehen vor dir — jage sie für **Fleisch** 🍗
   (sättigt mehr als Beeren; Fleisch essen ebenfalls mit **E**)
@@ -73,12 +80,14 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 - ⚙️ **Eisenerz** findest du viel im **Wald** (wenig im Schnee), 🥇 **Golderz**
   viel im **Schnee** (wenig im Wald) — schlagen gibt das Erz
 - 💎 **Diamanten** findest du nur im **Schnee** — schlagen gibt **Diamant**
-- 🪓 **Werkzeuge** baust du im Bau-Menü (**C**) in fünf Stufen: **Holz →
-  Stein → Eisen → Gold → Diamant**. Jede Stufe kostet Rohstoffe **plus das
-  Werkzeug der Vorstufe** — dafür ist sie stärker: Die **Axt** bringt +2
-  **Holz** pro Stufe (Holzaxt 3, Diamantaxt 11), die **Spitzhacke** +2
-  **Stein** sowie +1 **Erz**/**Diamant** pro Stufe, **Schwert** (+8) und
-  **Speer** (+12) machen mehr **Schaden** pro Stufe — der Speer am meisten
+- 🪓 **Werkzeuge** baust du im Bau-Menü (**C**) in vier Stufen: **Holz →
+  Eisen → Gold → Diamant** (Axt, Spitzhacke, Schwert, Speer — dazu die
+  **Schaufel** für Sand). Höhere Stufen sammeln mehr und schlagen härter
+  zu; **Golderz** lässt sich nur mit Spitzhacke abbauen, **Diamant** nur
+  mit mindestens der Gold-Spitzhacke
+- 🏆 **Punkte** gibt's fürs Sammeln, Bauen und Töten von Tieren — die
+  **Rangliste** oben rechts zeigt die Top 5 (Punkte bleiben nach dem Tod
+  erhalten). Holz, Stein und Erze stapeln sich bis **9999**
 - 🍓 **Beerensträucher** schlagen gibt **Beeren** (wachsen nach!)
 - 🚶 **Hitboxen**: Du kannst nicht mehr durch Bäume, Steine, Erze, Sträucher
   — und auch nicht durch andere Spieler — hindurchlaufen
