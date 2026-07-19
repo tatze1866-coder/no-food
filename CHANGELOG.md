@@ -5,6 +5,13 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 ## Unveröffentlicht (Branch `main`)
 
 ### Hinzugefügt
+- **Eigene Icons für Eisen-, Gold- und Diamant-Werkzeuge** (Axt, Spitzhacke,
+  Speer, Schwert): Sprites lagen bereits in `assets/` (z.B.
+  `tool-axe-iron.png`), waren aber noch keinem Item zugeordnet — Kommentar
+  im Item-Katalog sagte fälschlich "noch keine Sprites vorhanden". Jetzt in
+  `ITEMS` verlinkt und in `FILES` (statischer Dateiserver) freigegeben.
+  Gleiche Form wie das Holz-Werkzeug, nur eingefärbt: Eisen silbern/metallisch,
+  Gold goldfarben, Diamant hellblau — passend zu den Erzfarben.
 - **Strand-Biom** (Beach): schmaler Streifen zwischen Wald und Ozean, an
   dem sich der Ozean etwas verschmälert, damit er reinpasst. Eigene Farbe
   (`config.biomes`), begehbar wie Wald/Schnee.
