@@ -74,13 +74,79 @@ function getItemImage(id) {
 }
 
 // HTML-Schnipsel für ein Item-Icon: Bild, wenn vorhanden, sonst Emoji.
+// Rohstoffe/Drops bekommen zusätzlich eine farbige Icon-Kachel (Wiki-Optik,
+// dunkler Kasten mit Rahmen in der Item-Farbe) — Werkzeuge/Rüstung
+// behalten ihr großes Sprite ohne Rahmen.
 function itemIconHtml(id) {
   const item = ITEMS[id];
   if (!item) return "";
-  if (item.image) {
-    return '<img class="icon-img" src="' + item.image + '" alt="">';
+  const inner = item.image ? '<img class="icon-img" src="' + item.image + '" alt="">' : item.icon;
+  if (item.tool || item.armor) return inner;
+  const color = item.color || "#9e9e9e";
+  return '<span class="item-tile" style="--item-color:' + color + '">' + inner + "</span>";
+}
+
+// Findet für ein Item heraus, wie man es bekommt: entweder direkt aus dem
+// Katalog (Sammeln/Drop-Items) oder — falls es Ergebnis eines Rezepts ist —
+// automatisch aus RECIPES zusammengebaut ("Crafting").
+function itemTypeAndSource(id) {
+  for (const rid in RECIPES) {
+    const recipe = RECIPES[rid];
+    if (recipe.result && recipe.result[id]) {
+      const parts = Object.entries(recipe.cost).map(
+        ([cid, n]) => (ITEMS[cid] ? ITEMS[cid].name : cid) + " x" + n
+      );
+      let source = "Gebaut aus " + parts.join(", ");
+      if (recipe.requiresNear === "campfire") source += " (am Lagerfeuer)";
+      return { type: "Crafting", source };
+    }
   }
-  return item.icon;
+  const item = ITEMS[id];
+  if (item && item.source) return { type: item.type || "Sammeln", source: item.source };
+  return null;
+}
+
+// Die Item-Info-Karte (Name, Icon, Spruch, Typ/Herkunft) anzeigen —
+// im Stil einer Wiki-Karte, folgt der Maus in der Nähe des Items.
+function showItemTooltip(id, x, y) {
+  const item = ITEMS[id];
+  const tip = document.getElementById("item-tooltip");
+  if (!item || !tip) return;
+
+  const info = itemTypeAndSource(id);
+  let html = '<div class="tip-header">' + item.name + "</div>";
+  html += '<div class="tip-icon-wrap">' + itemIconHtml(id) + "</div>";
+  if (item.flavor) html += '<div class="tip-flavor">„' + item.flavor + '"</div>';
+  if (info) {
+    html +=
+      '<div class="tip-row"><span class="tip-label">Typ</span><span>' + info.type + "</span></div>";
+    html +=
+      '<div class="tip-row"><span class="tip-label">Herkunft</span><span>' +
+      info.source +
+      "</span></div>";
+  }
+  tip.innerHTML = html;
+
+  // Karte nah am Mauszeiger, aber immer im Bildschirm
+  const width = 210;
+  let left = x + 18;
+  if (left + width > window.innerWidth) left = x - width - 18;
+  let top = Math.min(y, window.innerHeight - 190);
+  tip.style.left = left + "px";
+  tip.style.top = top + "px";
+  tip.classList.remove("hidden");
+}
+
+function hideItemTooltip() {
+  const tip = document.getElementById("item-tooltip");
+  if (tip) tip.classList.add("hidden");
+}
+
+// Item-Tooltip-Hover an ein Element hängen (Hotbar-Slot oder Rezept-Kachel)
+function attachItemTooltip(el, id) {
+  el.addEventListener("mouseenter", (e) => showItemTooltip(id, e.clientX, e.clientY));
+  el.addEventListener("mousemove", (e) => showItemTooltip(id, e.clientX, e.clientY));
+  el.addEventListener("mouseleave", hideItemTooltip);
 }
 
 function resizeCanvas() {
@@ -296,6 +362,7 @@ function applyState(msg) {
     entry.armor = p.armor || null;
     entry.dead = p.dead;
     entry.survivalTime = p.survivalTime;
+    entry.score = p.score || 0;
   }
 
   // Tiere: genauso wie die Spieler weich bewegt (x/y Anzeige, tx/ty Ziel)
@@ -421,19 +488,67 @@ function predictShake(me) {
   if (closest) closest.shake = 1;
 }
 
-// Anzeige (Balken + Inventar + Spielerzahl) aktualisieren
+// Anzeige (Balken + Inventar + Spielerzahl + Rangliste) aktualisieren
 function updateHUD(me) {
   if (me) {
     const healthPct = (me.health / CONFIG.maxHealth) * 100;
     const hungerPct = (me.hunger / CONFIG.maxHunger) * 100;
     // Kälte kommt schon als Wert von 0 bis 100 (100 = erfroren)
-    const coldPct = ((me.cold || 0) / 100) * 100;
+    const cold = me.cold || 0;
+    const coldPct = (cold / 100) * 100;
     document.getElementById("health-fill").style.width = healthPct + "%";
     document.getElementById("hunger-fill").style.width = hungerPct + "%";
     document.getElementById("cold-fill").style.width = coldPct + "%";
+    // Der Kälte-Balken wird erst angezeigt, wenn wirklich Kälte da ist —
+    // bei 0 (warm) bleibt er ausgeblendet, statt leer nebenherzustehen.
+    document.getElementById("cold-bar").classList.toggle("hidden", cold <= 0);
     updateInventory(me);
   }
   document.getElementById("player-count").textContent = players.size + " Spieler online";
+  updateLeaderboard();
+}
+
+// Rangliste oben rechts: die Top-Spieler nach Punkten, absteigend sortiert.
+let leaderboardSignature = "";
+function updateLeaderboard() {
+  const list = [...players.values()]
+    .filter((p) => p.name)
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, CONFIG.leaderboardSize || 5);
+
+  const signature = list.map((p) => p.id + ":" + p.name + ":" + p.score).join("|");
+  if (signature === leaderboardSignature) return;
+  leaderboardSignature = signature;
+
+  const board = document.getElementById("leaderboard");
+  if (!board) return;
+  let html = '<h3>🏆 Rangliste</h3>';
+  if (list.length === 0) {
+    html += '<div class="lb-empty">Noch keine Punkte</div>';
+  } else {
+    html += '<ol class="lb-list">';
+    for (const p of list) {
+      const mine = p.id === myId ? " lb-me" : "";
+      html +=
+        '<li class="' +
+        mine.trim() +
+        '"><span class="lb-name">' +
+        escapeHtml(p.name) +
+        '</span><span class="lb-score">' +
+        (p.score || 0) +
+        "</span></li>";
+    }
+    html += "</ol>";
+  }
+  board.innerHTML = html;
+}
+
+// Namen können vom Spieler frei gewählt werden — vor dem Einfügen als HTML
+// sichern, damit z.B. "<" im Namen keine Elemente kaputt macht.
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 // Liste der Item-IDs, die der Spieler besitzt (Anzahl > 0), in der
@@ -476,14 +591,13 @@ function updateInventory(me) {
 
     if (id) {
       const item = ITEMS[id];
-      slot.title = item.name;
       html += '<span class="icon">' + itemIconHtml(id) + "</span><span>" + inv[id] + "</span>";
+      attachItemTooltip(slot, id); // eigene Info-Karte statt Browser-Tooltip
 
       // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
       if (item.tool) {
         slot.classList.add("tool");
         if (me.equipped === id) slot.classList.add("equipped");
-        slot.title = item.name + " – Klicken zum Ausrüsten";
         slot.addEventListener("click", () => {
           sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
         });
@@ -492,7 +606,6 @@ function updateInventory(me) {
         // Optik wie Werkzeuge (anklickbar, "equipped"-Rahmen).
         slot.classList.add("tool");
         if (me.armor === id) slot.classList.add("equipped");
-        slot.title = item.name + " – Klicken zum Anlegen";
         slot.addEventListener("click", () => {
           sendMessage({ t: "equipArmor", item: me.armor === id ? null : id });
         });
@@ -534,11 +647,11 @@ function buildRecipeMenu() {
     // Kopf: nur noch das Icon des Ergebnisses (Name als Tooltip beim Hover)
     const resultId = Object.keys(recipe.result)[0];
     const icon = ITEMS[resultId] ? itemIconHtml(resultId) : "";
-    row.title = recipe.name;
     const head = document.createElement("div");
     head.className = "recipe-head";
     head.innerHTML = "<span>" + icon + "</span>";
     row.appendChild(head);
+    if (resultId) attachItemTooltip(row, resultId); // eigene Info-Karte statt Browser-Tooltip
 
     // Kosten-Zeile (wird von refreshRecipeMenu gefüllt)
     const cost = document.createElement("div");

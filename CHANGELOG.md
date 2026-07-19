@@ -5,6 +5,30 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 ## Unveröffentlicht (Branch `main`)
 
 ### Hinzugefügt
+- **Rangliste (Leaderboard) oben rechts**: zeigt die Top 5 Spieler nach
+  Punkten. Punkte gibt's fürs Sammeln (1 Holz = 1 Punkt, 1 Stein = 1 Punkt,
+  1 Eisenerz = 5 Punkte, 1 Golderz = 10 Punkte, 1 Diamant = 100 Punkte) und
+  fürs Töten von Tieren (gestaffelt nach Gefährlichkeit: Hase 5, Krabbe 20,
+  Spinne 15, Wolf 25, Polarfuchs 30, Königskrabbe 50, Eisbär 60, Mammut 300).
+  Die Punkte bleiben auch nach dem Tod erhalten (`player.score` in
+  `server.js`, mitgeschickt im `state`).
+- **Item-Info-Karte beim Hovern**: jedes Item in Hotbar/Bau-Menü zeigt beim
+  Draufzeigen eine kleine Karte im Wiki-Stil (Name, Icon, kurzer Spruch,
+  Typ und Herkunft). Craftbare Items ermitteln ihre Herkunft automatisch aus
+  `RECIPES` ("Gebaut aus ..."), alle anderen aus den neuen `source`/`type`-
+  Feldern im `ITEMS`-Katalog.
+- **Farbige Icon-Kacheln für Rohstoffe/Drops**: Holz, Steine, Erze, Felle,
+  Beeren usw. haben jetzt ein eigenes `color`-Feld und werden in einer
+  dunklen, farblich umrandeten Kachel dargestellt (angelehnt an die
+  Item-Karten aus dem Starve.io-Wiki). Werkzeuge/Rüstung bleiben unverändert.
+- **Kältebalken blendet sich aus**: der ❄️-Balken wird nur noch angezeigt,
+  solange `cold > 0` ist — bei 0 (warm) steht er nicht mehr leer neben den
+  anderen beiden.
+
+### Geändert
+- **Leben/Hunger/Kälte-Balken** stehen jetzt nebeneinander statt
+  untereinander (`#bars` in `style.css`: `flex-direction: row`).
+
 - **Eigenes Icon für Sand** (`assets/sand.png`): kleiner Sandhügel in zwei
   Brauntönen (heller oben/links, dunkler unten/rechts) mit ein paar
   Sandkörner-Sprenkeln, statt nur dem 🏖️-Emoji in der Inventar-/Crafting-UI.

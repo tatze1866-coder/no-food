@@ -170,6 +170,15 @@ const CONFIG = {
   crabClawFood: 10,        // Krabbenscheren: 10% Hunger je Stück
   crabHelmetDamageReduction: 5, // Krabbenhelm: pauschal weniger Schaden von allen Tieren
   // ------------------------------------------------------------------
+
+  // --- Punkte-System (Leaderboard oben rechts) -----------------------
+  pointsWood: 1,          // Punkte pro gesammeltem Holz
+  pointsStone: 1,         // Punkte pro gesammeltem Stein
+  pointsIron: 5,          // Punkte pro Eisenerz
+  pointsGold: 10,         // Punkte pro Golderz
+  pointsDiamond: 100,     // Punkte pro Diamant
+  leaderboardSize: 5,     // Wie viele Spieler in der Rangliste stehen
+  // ------------------------------------------------------------------
 };
 
 // ---------- ITEMS: Katalog aller Gegenstände ----------
@@ -180,13 +189,13 @@ const CONFIG = {
 // "food: true" markiert Essbares (die man essen kann).
 const ITEMS = {
   // Rohstoffe
-  wood:        { name: "Holz",            icon: "🪵" },
-  stone:       { name: "Stein",           icon: "🪨" },
-  berry:       { name: "Beere",           icon: "🍓", food: true },
-  iron_ore:    { name: "Eisenerz",        icon: "⚙️" },
-  gold_ore:    { name: "Golderz",         icon: "🥇" },
-  diamond:     { name: "Diamant",         icon: "💎" },
-  sand:        { name: "Sand",            icon: "🏖️", image: "assets/sand.png" },
+  wood:        { name: "Holz",            icon: "🪵", color: "#a9744f", flavor: "Riecht nach frischem Wald.",  type: "Sammeln", source: "Bäume im Wald oder Schnee fällen" },
+  stone:       { name: "Stein",           icon: "🪨", color: "#b5b5b5", flavor: "Fest und zuverlässig.",       type: "Sammeln", source: "Steine im Wald oder Schnee abbauen" },
+  berry:       { name: "Beere",           icon: "🍓", food: true, color: "#8e44ad", flavor: "Schmecken beerig gut!", type: "Sammeln", source: "Beerensträucher pflücken (wachsen nach)" },
+  iron_ore:    { name: "Eisenerz",        icon: "⚙️", color: "#8fa3ad", flavor: "Schwer in der Tasche.",       type: "Sammeln", source: "Eisenerz-Vorkommen abbauen" },
+  gold_ore:    { name: "Golderz",         icon: "🥇", color: "#e0b23e", flavor: "Glänzt verdächtig.",          type: "Sammeln", source: "Golderz-Vorkommen abbauen (braucht Spitzhacke)" },
+  diamond:     { name: "Diamant",         icon: "💎", color: "#63e6e8", flavor: "Selten und kostbar.",         type: "Sammeln", source: "Diamant-Vorkommen abbauen (braucht Gold-Spitzhacke)" },
+  sand:        { name: "Sand",            icon: "🏖️", image: "assets/sand.png", color: "#e3c98a", flavor: "Wie am Strand, zufälligerweise.", type: "Sammeln", source: "Sand am Strand abbauen" },
 
   // Werkzeuge (ausrüstbar) — "image" zeigt auf ein eigenes Icon-Bild,
   // das der Client statt des Emojis anzeigt (icon bleibt als Fallback).
@@ -219,17 +228,17 @@ const ITEMS = {
 
   // Tier-Drops (Fleisch fällt schon von Tieren; Felle sind für spätere
   // Rezepte gedacht, z.B. warme Kleidung).
-  raw_meat:    { name: "Rohes Fleisch",   icon: "🥩", food: true },
-  cooked_meat: { name: "Gebratenes Fleisch", icon: "🍖", food: true },
-  rabbit_hide: { name: "Hasenfell",       icon: "🐇" },
-  wolf_fur:    { name: "Wolfsfell",       icon: "🐺" },
-  winter_fur:  { name: "Winterfell",      icon: "🐻‍❄️" },
-  mammoth_fur: { name: "Mammutfell",      icon: "🦣" },
-  spider_silk: { name: "Spinnenfaden",    icon: "🕸️" },
+  raw_meat:    { name: "Rohes Fleisch",   icon: "🥩", food: true, color: "#e0776b", flavor: "Noch blutig.", type: "Drop", source: "Fällt von getöteten Tieren" },
+  cooked_meat: { name: "Gebratenes Fleisch", icon: "🍖", food: true, color: "#c1440e", flavor: "Perfekt am Lagerfeuer gegart." },
+  rabbit_hide: { name: "Hasenfell",       icon: "🐇", color: "#f2a6c6", flavor: "Sorry, kleiner Hase.",          type: "Drop", source: "Fällt von Hasen" },
+  wolf_fur:    { name: "Wolfsfell",       icon: "🐺", color: "#c0392b", flavor: "Bitte nicht dem Rudel erzählen.", type: "Drop", source: "Fällt von Wölfen" },
+  winter_fur:  { name: "Winterfell",      icon: "🐻‍❄️", color: "#c0392b", flavor: "Kalt wie der Schnee, aus dem es kam.", type: "Drop", source: "Fällt von Polarfüchsen und Eisbären" },
+  mammoth_fur: { name: "Mammutfell",      icon: "🦣", color: "#a1662f", flavor: "Von einem echten Riesen.",     type: "Drop", source: "Fällt von Mammuts" },
+  spider_silk: { name: "Spinnenfaden",    icon: "🕸️", color: "#cfd8dc", flavor: "Kribbelig, aber nützlich.",    type: "Drop", source: "Fällt von Spinnen" },
 
   // Krabben (Strand-Biom) — Drops, Waffe und Rüstung nach Wiki-Vorlage
-  crab_sticks: { name: "Krabbenstäbchen", icon: "🍢", image: "assets/crab-sticks.png", food: true },
-  crab_claws:  { name: "Krabbenscheren",  icon: "🦞", image: "assets/crab-claws.png",  food: true },
+  crab_sticks: { name: "Krabbenstäbchen", icon: "🍢", image: "assets/crab-sticks.png", food: true, color: "#e6a15a", flavor: "Riecht nach Meer.", type: "Drop", source: "Fällt von Krabben" },
+  crab_claws:  { name: "Krabbenscheren",  icon: "🦞", image: "assets/crab-claws.png",  food: true, color: "#d9534f", flavor: "Vorsicht, kneift noch.", type: "Drop", source: "Fällt von Krabben" },
   crab_spear:  { name: "Krabbenspeer",    icon: "🔱", image: "assets/tool-crab-spear.png", tool: true },
   // "armor: true" markiert Rüstung (eigener Ausrüstungs-Platz, siehe equipArmor)
   crab_helmet: { name: "Krabbenhelm",     icon: "🦀", image: "assets/crab-helmet.png", armor: true },
@@ -279,22 +288,23 @@ const RECIPES = {
 // furId/furAmount = welches Fell-/Faden-Item zusätzlich fällt.
 // special: "web" = fängt den Spieler beim Angriff kurz in einem Netz.
 // boss: true = Mini-Boss (sehr viel Leben + Schaden), taucht selten auf.
+// points = Leaderboard-Punkte für's Töten (schwerere/gefährlichere Tiere geben mehr).
 const ANIMAL_TYPES = {
-  rabbit:    { biome: "forest", speed: 170, health: 60,   damage: 0,  meat: 1, furId: "rabbit_hide", furAmount: 1,  radius: 14, hostile: "never" },
-  spider:    { biome: "forest", speed: 180, health: 120,  damage: 30, meat: 0, furId: "spider_silk", furAmount: 2,  radius: 14, hostile: "night",  special: "web" },
-  wolf:      { biome: "forest", speed: 200, health: 300,  damage: 40, meat: 2, furId: "wolf_fur",    furAmount: 1,  radius: 18, hostile: "always" },
-  arcticFox: { biome: "snow",   speed: 230, health: 300,  damage: 40, meat: 2, furId: "winter_fur",  furAmount: 1,  radius: 20, hostile: "always" },
-  polarBear: { biome: "snow",   speed: 195, health: 900,  damage: 60, meat: 3, furId: "winter_fur",  furAmount: 2,  radius: 27, hostile: "always" },
-  mammoth:   { biome: "snow",   speed: 240, health: 3000, damage: 90, meat: 7, furId: "mammoth_fur", furAmount: 10, radius: 55, hostile: "always", boss: true },
+  rabbit:    { biome: "forest", speed: 170, health: 60,   damage: 0,  meat: 1, furId: "rabbit_hide", furAmount: 1,  radius: 14, hostile: "never",  points: 5 },
+  spider:    { biome: "forest", speed: 180, health: 120,  damage: 30, meat: 0, furId: "spider_silk", furAmount: 2,  radius: 14, hostile: "night",  special: "web", points: 15 },
+  wolf:      { biome: "forest", speed: 200, health: 300,  damage: 40, meat: 2, furId: "wolf_fur",    furAmount: 1,  radius: 18, hostile: "always", points: 25 },
+  arcticFox: { biome: "snow",   speed: 230, health: 300,  damage: 40, meat: 2, furId: "winter_fur",  furAmount: 1,  radius: 20, hostile: "always", points: 30 },
+  polarBear: { biome: "snow",   speed: 195, health: 900,  damage: 60, meat: 3, furId: "winter_fur",  furAmount: 2,  radius: 27, hostile: "always", points: 60 },
+  mammoth:   { biome: "snow",   speed: 240, health: 3000, damage: 90, meat: 7, furId: "mammoth_fur", furAmount: 10, radius: 55, hostile: "always", boss: true, points: 300 },
 
   // Krabben (Strand) — nach Wiki: "neutral, wandert friedlich, bis sie
   // angegriffen wird — dann genauso schnell wie ein Spieler mit Waffe".
   // hostile: "onHit" ist ein eigener Typ (siehe updateAnimal): das Tier
   // wird erst feindlich, nachdem es einmal getroffen wurde (animal.aggro).
   // "drops" ersetzt hier meat/furId — Krabben lassen eigene Items fallen.
-  crab:      { biome: "beach",  speed: 240, health: 240,  damage: 35, meat: 0, radius: 22, hostile: "onHit",
+  crab:      { biome: "beach",  speed: 240, health: 240,  damage: 35, meat: 0, radius: 22, hostile: "onHit", points: 20,
                drops: { crab_sticks: 1, crab_claws: 1 } },
-  kingCrab:  { biome: "beach",  speed: 235, health: 600,  damage: 55, meat: 0, radius: 30, hostile: "onHit",
+  kingCrab:  { biome: "beach",  speed: 235, health: 600,  damage: 55, meat: 0, radius: 30, hostile: "onHit", points: 50,
                drops: { crab_sticks: 4, crab_claws: 4 } },
 };
 
@@ -663,6 +673,7 @@ function addPlayer(id, name) {
     dead: false,
     trapped: 0,         // Sekunden, die der Spieler noch im Spinnennetz feststeckt
     survivalTime: 0,    // Wie lange der Spieler schon lebt (Sekunden)
+    score: 0,           // Leaderboard-Punkte (bleiben auch nach dem Tod erhalten)
     input: { up: false, down: false, left: false, right: false },
   });
 }
@@ -1150,6 +1161,8 @@ function tryHit(player) {
       if (type.drops) {
         for (const dropId in type.drops) giveItem(player, dropId, type.drops[dropId]);
       }
+      // Leaderboard-Punkte fürs Töten (siehe points je Tierart)
+      player.score += type.points || 0;
     }
     return;
   }
@@ -1163,7 +1176,8 @@ function tryHit(player) {
     else if (player.equipped === "iron_axe") amount += CONFIG.axeIronBonus;
     else if (player.equipped === "gold_axe") amount += CONFIG.axeGoldBonus;
     else if (player.equipped === "diamond_axe") amount += CONFIG.axeDiamondBonus;
-    giveItem(player, "wood", amount);
+    const addedWood = giveItem(player, "wood", amount);
+    player.score += addedWood * CONFIG.pointsWood;
   } else if (closest.type === "rock") {
     // Stein: mit JEDER Spitzhacke abbaubar (auch bloße Hand), aber höhere
     // Spitzhacken-Stufen holen mehr pro Schlag (1/1/2/3/4, siehe CONFIG).
@@ -1174,6 +1188,7 @@ function tryHit(player) {
     if (added > 0) {
       closest.amount -= added;
       changedOres.add(closestIndex);
+      player.score += added * CONFIG.pointsStone;
     }
   } else if (closest.type === "iron_ore") {
     // Erz abbauen profitiert genauso von der Spitzhacke wie Stein
@@ -1182,7 +1197,8 @@ function tryHit(player) {
     else if (player.equipped === "iron_pickaxe") amount += CONFIG.pickaxeIronBonus;
     else if (player.equipped === "gold_pickaxe") amount += CONFIG.pickaxeGoldBonus;
     else if (player.equipped === "diamond_pickaxe") amount += CONFIG.pickaxeDiamondBonus;
-    giveItem(player, "iron_ore", amount);
+    const addedIron = giveItem(player, "iron_ore", amount);
+    player.score += addedIron * CONFIG.pointsIron;
   } else if (closest.type === "gold_ore") {
     // Gold: braucht mindestens eine Spitzhacke (bloße Hand bekommt nichts) —
     // wie im Wiki: "gathered with a stone pickaxe or higher".
@@ -1192,6 +1208,7 @@ function tryHit(player) {
     if (added > 0) {
       closest.amount -= added;
       changedOres.add(closestIndex);
+      player.score += added * CONFIG.pointsGold;
     }
   } else if (closest.type === "diamond") {
     // Diamant: braucht mindestens eine Gold-Spitzhacke — wie im Wiki:
@@ -1202,6 +1219,7 @@ function tryHit(player) {
     if (added > 0) {
       closest.amount -= added;
       changedOres.add(closestIndex);
+      player.score += added * CONFIG.pointsDiamond;
     }
   } else if (closest.type === "sand_pile") {
     // Sand: mit der Schaufel gibt's mehr, wie im Wiki ("using a shovel,
@@ -1280,6 +1298,7 @@ function stateMessage() {
       dead: p.dead,
       trapped: p.trapped > 0,
       survivalTime: Math.floor(p.survivalTime),
+      score: Math.round(p.score || 0),
     });
   }
 
@@ -1367,6 +1386,7 @@ wss.on("connection", (ws) => {
           maxHealth: CONFIG.maxHealth,
           maxHunger: CONFIG.maxHunger,
           capacity: CONFIG.capacity,
+          leaderboardSize: CONFIG.leaderboardSize,
           biomes: BIOMES,   // Biom-Rechtecke inkl. Farbe (zum Zeichnen + Minimap)
           rivers: RIVERS,   // Fluss-Linien inkl. Breite (zum Zeichnen)
         },
