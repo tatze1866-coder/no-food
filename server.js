@@ -186,7 +186,11 @@ const CONFIG = {
   botFleeRange: 180,    // Ab dieser Entfernung fliehen Bots vor feindlichen Tieren
   botGatherRange: 2500, // So weit suchen Bots nach einer Ressource (Pixel)
   botBaseRadius: 80,    // Radius des Wand-Rings um die Mitte der Bot-Basis
-  botHomeRange: 600,    // Mit Basis: so weit entfernt sammeln Bots höchstens
+  // Mit Basis: so weit entfernt sammeln Bots bevorzugt. Der Wert muss zur
+  // Welt passen (36000px, Wald ~324 Mio px² für 525 Sträucher): bei 600px
+  // lägen im Schnitt keine 2 Sträucher in Reichweite — die Bots verhungerten
+  // an der eigenen Basis, seit Vorkommen endlich sind und nachwachsen müssen.
+  botHomeRange: 2000,
   botRepairCheck: 8,    // Sekunden zwischen zwei Prüfungen auf fehlende Basis-Wände
   // ------------------------------------------------------------------
 };
@@ -1032,23 +1036,33 @@ function botTargetValid(player) {
 function botPickResource(player, itemId) {
   const bot = player.bot;
   const type = BOT_GATHER[itemId];
-  const home = bot && bot.baseCenter;
-  const ax = home ? home.x : player.x;
-  const ay = home ? home.y : player.y;
-  const range = home ? CONFIG.botHomeRange : CONFIG.botGatherRange;
-  let best = null;
-  let bestDist = range;
-  for (const res of resources) {
-    if (res.type !== type) continue;
-    if (RESOURCE_POOLS[type] && (res.amount || 0) <= 0) continue;
-    if (type === "bush" && res.berries <= 0) continue;
-    const d = dist(res.x, res.y, ax, ay);
-    if (d < bestDist) {
-      best = res;
-      bestDist = d;
+
+  // Sucht das nächste brauchbare Vorkommen rund um (ax, ay) im Umkreis range
+  function search(ax, ay, range) {
+    let best = null;
+    let bestDist = range;
+    for (const res of resources) {
+      if (res.type !== type) continue;
+      if (RESOURCE_POOLS[type] && (res.amount || 0) <= 0) continue;
+      if (type === "bush" && res.berries <= 0) continue;
+      const d = dist(res.x, res.y, ax, ay);
+      if (d < bestDist) {
+        best = res;
+        bestDist = d;
+      }
     }
+    return best;
   }
-  return best;
+
+  // Mit Basis zuerst in der Heimat suchen (der Bot soll dort wohnen bleiben)
+  const home = bot && bot.baseCenter;
+  if (home) {
+    const nearHome = search(home.x, home.y, CONFIG.botHomeRange);
+    if (nearHome) return nearHome;
+    // Nichts mehr in der Heimat (leer gesammelt oder von Haus aus dünn
+    // besiedelt): weiter weg suchen, statt hungrig zu Hause sitzen zu bleiben
+  }
+  return search(player.x, player.y, CONFIG.botGatherRange);
 }
 
 // Nächstes brennendes Lagerfeuer suchen (null = keins da)
@@ -1182,10 +1196,16 @@ function botThink(player, dt) {
           const a = (slot / BOT_BASE_SLOTS) * Math.PI * 2;
           const sx = bot.baseCenter.x + Math.cos(a) * CONFIG.botBaseRadius;
           const sy = bot.baseCenter.y + Math.sin(a) * CONFIG.botBaseRadius;
+          // Toleranz 55px, nicht 30: placeItem() setzt die Wand 50px VOR den
+          // Bot, der beim Bauen nur bis auf 30px an den Platz herangeht — die
+          // Wand landet also 20-50px neben der Soll-Position (gemessen: 48px).
+          // Mit 30px hielt die Prüfung eine stehende Wand für zerstört und
+          // ließ sie sinnlos neu bauen. 55px bleibt unter dem Abstand zweier
+          // Nachbarplätze (61px), verwechselt sie also nicht.
           let standing = false;
           for (const s of structures) {
             if (!WALL_TYPES[s.type]) continue;
-            if (dist(s.x, s.y, sx, sy) < 30) { standing = true; break; }
+            if (dist(s.x, s.y, sx, sy) < 55) { standing = true; break; }
           }
           if (!standing) {
             bot.baseSlotsTodo.push(slot);
