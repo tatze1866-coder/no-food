@@ -62,20 +62,14 @@ const CONFIG = {
   // deshalb aktuell ausschließlich Schnee-Vorkommen). Deutlich seltener als Gold.
   snowDiamond: 28,
 
-  // Erz-Vorkommen sind begrenzte Lagerstätten, die sich mit der Zeit wieder
-  // auffüllen (wie im Wiki beschrieben) — anders als Bäume/Steine, die
-  // unbegrenzt sind. amount = aktueller Vorrat, maxAmount = volle Größe.
-  oreRegenInterval: 10,   // Sekunden zwischen zwei Nachwachs-Schüben (wie im Wiki: "alle 10 Sekunden")
-  stoneMaxAmount: 120,    // Stein-Vorkommen: Vorrat pro Lagerstätte
-  stoneRegenMin: 1,       // Stein wächst 1-4 pro Schub nach (abhängig von Größe)
-  stoneRegenMax: 4,
-  goldMaxAmount: 90,      // Gold-Vorkommen: Vorrat pro Lagerstätte
-  goldRegenMin: 1,        // Gold wächst 1-3 pro Schub nach
-  goldRegenMax: 3,
-  diamondMaxAmount: 40,   // Diamant-Vorkommen: Vorrat pro Lagerstätte
-  diamondRegenMin: 1,     // Diamant wächst 1-2 pro Schub nach (große Vorkommen: doppelt)
-  diamondRegenMax: 2,
-  diamondLargeChance: 0.2, // 20% der Diamant-Vorkommen sind "groß": mehr Vorrat + doppeltes Nachwachsen
+  // Jedes Ressourcen-Vorkommen (Baum, Stein, Erz, Sand — siehe RESOURCE_POOLS)
+  // ist eine begrenzte Lagerstätte, die sich mit der Zeit wieder auffüllt,
+  // statt unendlich Rohstoffe zu geben: amount = aktueller Vorrat, maxAmount
+  // = volle Größe. So kann man nicht ewig an derselben Stelle abbauen,
+  // sondern muss weiterziehen, während leer geerntete Stellen nachwachsen.
+  oreRegenInterval: 10,      // Sekunden zwischen zwei Nachwachs-Schüben (wie im Wiki: "alle 10 Sekunden")
+  resourceLargeChance: 0.25, // 25% jedes Vorkommens (auch Beerensträucher) sind "groß":
+                             // mehr Vorrat/Beeren, größeres Sprite, doppelt so schnelles Nachwachsen
 
   // Ausbeute pro Schlag, gestaffelt nach Spitzhacken-Stufe — Index 0-4:
   // [bloße Hand, Holz-Spitzhacke, Eisen-Spitzhacke, Gold-Spitzhacke, Diamant-Spitzhacke].
@@ -86,7 +80,8 @@ const CONFIG = {
   goldYieldByTier:    [0, 1, 2, 3, 4],
   diamondYieldByTier: [0, 0, 0, 1, 2],
 
-  bushBerries: 4,         // Beeren pro Strauch
+  bushMaxBerries: { small: 3, large: 7 }, // Beeren pro Strauch, je nach Größe (siehe resourceLargeChance)
+  bushRadius: { small: [20, 27], large: [30, 38] },
   berryRegrow: 20,        // Sekunden bis eine Beere nachwächst
 
   // Tag/Nacht-Wechsel (in Sekunden): nach dayLength Tag kommt nightLength Nacht
@@ -304,6 +299,70 @@ const RECIPES = {
 // sie blockieren Spieler UND Tiere. radius = Hitbox, health = Leben.
 const WALL_TYPES = { wood_wall: { radius: 28, health: 120 }, stone_wall: { radius: 28, health: 300 } };
 
+// ---------- RESOURCE_POOLS: Vorrat, Größe und Nachwachsen der Punkt-Ressourcen ----------
+// Jeder Baum/Stein/Erz/Sandhügel ist eine begrenzte Lagerstätte statt einer
+// unendlichen Quelle: amount/maxAmount pro Vorkommen (siehe spawnPointResource),
+// die sich alle CONFIG.oreRegenInterval Sekunden auffüllt (regen). "large" —
+// per CONFIG.resourceLargeChance zufällig vergeben — verdoppelt sowohl den
+// Vorrat als auch die Nachwachs-Menge und benutzt die größere radius-Spanne.
+// item = welches Inventar-Item das Vorkommen beim Abbau liefert.
+// Beerensträucher (bush) funktionieren ähnlich (siehe bushMaxBerries in
+// CONFIG), sind aber eine eigene Struktur und stehen deshalb NICHT hier.
+const RESOURCE_POOLS = {
+  tree: {
+    item: "wood",
+    maxAmount: { small: 40, large: 90 },
+    radius: { small: [34, 46], large: [50, 66] },
+    regen: { min: 2, max: 5 },
+  },
+  rock: {
+    item: "stone",
+    maxAmount: { small: 60, large: 120 },
+    radius: { small: [24, 32], large: [36, 48] },
+    regen: { min: 1, max: 4 },
+  },
+  iron_ore: {
+    item: "iron_ore",
+    maxAmount: { small: 45, large: 90 },
+    radius: { small: [22, 28], large: [32, 42] },
+    regen: { min: 1, max: 3 },
+  },
+  gold_ore: {
+    item: "gold_ore",
+    maxAmount: { small: 45, large: 90 },
+    radius: { small: [22, 28], large: [32, 42] },
+    regen: { min: 1, max: 3 },
+  },
+  diamond: {
+    item: "diamond",
+    maxAmount: { small: 20, large: 40 },
+    radius: { small: [20, 26], large: [30, 40] },
+    regen: { min: 1, max: 2 },
+  },
+  sand_pile: {
+    item: "sand",
+    maxAmount: { small: 30, large: 70 },
+    radius: { small: [16, 20], large: [24, 32] },
+    regen: { min: 2, max: 5 },
+  },
+};
+
+// Ein einzelnes Vorkommen erzeugen: Größe (klein/groß) auswürfeln und
+// passenden Vorrat + Sprite-Radius aus RESOURCE_POOLS ziehen.
+function spawnPointResource(type, biome, margin) {
+  const pool = RESOURCE_POOLS[type];
+  const pos = randInBiome(biome, margin);
+  const large = Math.random() < CONFIG.resourceLargeChance;
+  const maxAmount = large ? pool.maxAmount.large : pool.maxAmount.small;
+  const [rMin, rMax] = large ? pool.radius.large : pool.radius.small;
+  const res = {
+    type, x: pos.x, y: pos.y, radius: rand(rMin, rMax),
+    amount: maxAmount, maxAmount, oreRegrowTimer: 0,
+  };
+  if (large) res.large = true;
+  return res;
+}
+
 // ---------- Tier-Arten ----------
 // hostile: "never" = nie feindlich, "night" = nur nachts, "always" = immer.
 // meat = wie viele rohe Fleischstücke ein getötetes Tier fallen lässt.
@@ -518,72 +577,61 @@ function createWorld() {
   const forest = BIOMES.find((b) => b.name === "forest");
   const snow = BIOMES.find((b) => b.name === "snow");
 
-  // Bäume (Wald + Schnee)
+  // Bäume (Wald + Schnee) — begrenzter Vorrat, der mit der Zeit nachwächst
   for (let i = 0; i < CONFIG.forestTrees + CONFIG.snowTrees; i++) {
     const biome = i < CONFIG.forestTrees ? forest : snow;
-    const pos = randInBiome(biome, 60);
-    resources.push({ type: "tree", x: pos.x, y: pos.y, radius: rand(38, 55) });
+    resources.push(spawnPointResource("tree", biome, 60));
   }
 
   // Steine (Wald + Schnee) — begrenzter Vorrat, der mit der Zeit nachwächst
   for (let i = 0; i < CONFIG.forestRocks + CONFIG.snowRocks; i++) {
     const biome = i < CONFIG.forestRocks ? forest : snow;
-    const pos = randInBiome(biome, 60);
-    resources.push({
-      type: "rock", x: pos.x, y: pos.y, radius: rand(26, 38),
-      amount: CONFIG.stoneMaxAmount, maxAmount: CONFIG.stoneMaxAmount, oreRegrowTimer: 0,
-    });
+    resources.push(spawnPointResource("rock", biome, 60));
   }
 
-  // Eisenerz (viel im Wald, wenig im Schnee) — unbegrenzt, wie gehabt
+  // Eisenerz (viel im Wald, wenig im Schnee) — begrenzter Vorrat, wächst nach
   for (let i = 0; i < CONFIG.forestIronOre + CONFIG.snowIronOre; i++) {
     const biome = i < CONFIG.forestIronOre ? forest : snow;
-    const pos = randInBiome(biome, 60);
-    resources.push({ type: "iron_ore", x: pos.x, y: pos.y, radius: rand(24, 34) });
+    resources.push(spawnPointResource("iron_ore", biome, 60));
   }
 
   // Golderz (viel im Schnee, wenig im Wald) — begrenzter Vorrat, wächst nach
   for (let i = 0; i < CONFIG.snowGoldOre + CONFIG.forestGoldOre; i++) {
     const biome = i < CONFIG.snowGoldOre ? snow : forest;
-    const pos = randInBiome(biome, 60);
-    resources.push({
-      type: "gold_ore", x: pos.x, y: pos.y, radius: rand(24, 34),
-      amount: CONFIG.goldMaxAmount, maxAmount: CONFIG.goldMaxAmount, oreRegrowTimer: 0,
-    });
+    resources.push(spawnPointResource("gold_ore", biome, 60));
   }
 
   // Diamant — wie im Wiki NUR im Schnee-Biom (dort auch nur an wenigen
-  // Stellen, deutlich seltener als Gold). 20% der Vorkommen sind "groß":
-  // mehr Vorrat und doppelt so schnelles Nachwachsen.
+  // Stellen, deutlich seltener als Gold).
   for (let i = 0; i < CONFIG.snowDiamond; i++) {
-    const pos = randInBiome(snow, 60);
-    const large = Math.random() < CONFIG.diamondLargeChance;
-    const maxAmount = large ? CONFIG.diamondMaxAmount * 2 : CONFIG.diamondMaxAmount;
-    resources.push({
-      type: "diamond", x: pos.x, y: pos.y, radius: rand(24, 34),
-      amount: maxAmount, maxAmount, large, oreRegrowTimer: 0,
-    });
+    resources.push(spawnPointResource("diamond", snow, 60));
   }
 
-  // Sand-Häufchen (Strand) — mit der Schaufel abbaubar, unbegrenzt wie Bäume
+  // Sand-Häufchen (Strand) — mit der Schaufel abbaubar, begrenzter Vorrat
   const beach = BIOMES.find((b) => b.name === "beach");
   for (let i = 0; i < CONFIG.beachSand; i++) {
-    const pos = randInBiome(beach, 40);
-    resources.push({ type: "sand_pile", x: pos.x, y: pos.y, radius: rand(18, 26) });
+    resources.push(spawnPointResource("sand_pile", beach, 40));
   }
 
-  // Beerensträucher (Wald + Schnee)
+  // Beerensträucher (Wald + Schnee) — eigene Struktur (Beeren statt amount),
+  // aber genau wie die anderen Vorkommen zufällig klein oder groß.
   for (let i = 0; i < CONFIG.forestBushes + CONFIG.snowBushes; i++) {
     const biome = i < CONFIG.forestBushes ? forest : snow;
     const pos = randInBiome(biome, 60);
-    resources.push({
+    const large = Math.random() < CONFIG.resourceLargeChance;
+    const maxBerries = large ? CONFIG.bushMaxBerries.large : CONFIG.bushMaxBerries.small;
+    const [rMin, rMax] = large ? CONFIG.bushRadius.large : CONFIG.bushRadius.small;
+    const bush = {
       type: "bush",
       x: pos.x,
       y: pos.y,
-      radius: rand(22, 30),
-      berries: CONFIG.bushBerries,
+      radius: rand(rMin, rMax),
+      berries: maxBerries,
+      maxBerries,
       regrowTimer: 0,
-    });
+    };
+    if (large) bush.large = true;
+    resources.push(bush);
   }
 
   spawnAnimals();
@@ -638,11 +686,11 @@ function worldForClient() {
   return resources.map((res) => {
     const r = { type: res.type, x: Math.round(res.x), y: Math.round(res.y), radius: Math.round(res.radius) };
     if (res.type === "bush") r.berries = res.berries;
-    if (res.type === "rock" || res.type === "gold_ore" || res.type === "diamond") {
+    if (RESOURCE_POOLS[res.type]) {
       r.amount = res.amount;
       r.maxAmount = res.maxAmount;
-      if (res.large) r.large = true;
     }
+    if (res.large) r.large = true;
     return r;
   });
 }
@@ -960,8 +1008,8 @@ function botTargetValid(player) {
   const res = bot.target;
   if (!res || bot.targetItem === null) return false;
   if (BOT_GATHER[bot.targetItem] !== res.type) return false;
-  if (res.type === "rock" && (res.amount || 0) <= 0) return false; // Lagerstätte leer
-  if (res.type === "bush" && res.berries <= 0) return false;       // abgeerntet
+  if (RESOURCE_POOLS[res.type] && (res.amount || 0) <= 0) return false; // Lagerstätte leer
+  if (res.type === "bush" && res.berries <= 0) return false;            // abgeerntet
   return true;
 }
 
@@ -972,7 +1020,7 @@ function botPickResource(player, itemId) {
   let bestDist = CONFIG.botGatherRange;
   for (const res of resources) {
     if (res.type !== type) continue;
-    if (type === "rock" && (res.amount || 0) <= 0) continue;
+    if (RESOURCE_POOLS[type] && (res.amount || 0) <= 0) continue;
     if (type === "bush" && res.berries <= 0) continue;
     const d = dist(res.x, res.y, player.x, player.y);
     if (d < bestDist) {
@@ -1371,10 +1419,10 @@ function update(dt) {
     }
   }
 
-  // --- Beeren wachsen nach ---
+  // --- Beeren wachsen nach (bis zum eigenen maxBerries, klein oder groß) ---
   for (let i = 0; i < resources.length; i++) {
     const res = resources[i];
-    if (res.type === "bush" && res.berries < CONFIG.bushBerries) {
+    if (res.type === "bush" && res.berries < res.maxBerries) {
       res.regrowTimer += dt;
       if (res.regrowTimer >= CONFIG.berryRegrow) {
         res.regrowTimer = 0;
@@ -1384,21 +1432,20 @@ function update(dt) {
     }
   }
 
-  // --- Erz-Vorkommen wachsen nach (Stein, Gold, Diamant) ---
+  // --- Ressourcen-Vorkommen wachsen nach (Baum, Stein, Eisen, Gold, Diamant,
+  // Sand — siehe RESOURCE_POOLS) ---
   // Jedes Vorkommen hat einen begrenzten Vorrat (amount/maxAmount), der sich
   // alle CONFIG.oreRegenInterval Sekunden um einen Zufallsbetrag auffüllt —
-  // genau wie im Wiki beschrieben ("wächst alle 10 Sekunden nach").
+  // genau wie im Wiki beschrieben ("wächst alle 10 Sekunden nach"). Große
+  // Vorkommen (res.large) wachsen doppelt so schnell nach wie kleine.
   for (let i = 0; i < resources.length; i++) {
     const res = resources[i];
-    if (res.type !== "rock" && res.type !== "gold_ore" && res.type !== "diamond") continue;
-    if (res.amount >= res.maxAmount) continue;
+    const pool = RESOURCE_POOLS[res.type];
+    if (!pool || res.amount >= res.maxAmount) continue;
     res.oreRegrowTimer += dt;
     if (res.oreRegrowTimer >= CONFIG.oreRegenInterval) {
       res.oreRegrowTimer = 0;
-      let regenAmt;
-      if (res.type === "rock") regenAmt = Math.round(rand(CONFIG.stoneRegenMin, CONFIG.stoneRegenMax));
-      else if (res.type === "gold_ore") regenAmt = Math.round(rand(CONFIG.goldRegenMin, CONFIG.goldRegenMax));
-      else regenAmt = Math.round(rand(CONFIG.diamondRegenMin, CONFIG.diamondRegenMax)) * (res.large ? 2 : 1);
+      const regenAmt = Math.round(rand(pool.regen.min, pool.regen.max)) * (res.large ? 2 : 1);
       res.amount = Math.min(res.maxAmount, res.amount + Math.max(1, regenAmt));
       changedOres.add(i);
     }
@@ -1569,14 +1616,20 @@ function hitDamage(player) {
 // je getroffener Ressource aufgerufen — es können mehrere gleichzeitig sein.
 function harvestResource(player, res, index) {
   if (res.type === "tree") {
-    // Mit Axt gibt's mehr Holz — Eisen mehr als Holz, Gold mehr als Eisen, Diamant am meisten
+    // Mit Axt gibt's mehr Holz — Eisen mehr als Holz, Gold mehr als Eisen,
+    // Diamant am meisten. Der Baum hat einen begrenzten Vorrat, der nachwächst.
     let amount = CONFIG.woodPerHit;
     if (player.equipped === "axe") amount += CONFIG.axeWoodBonus;
     else if (player.equipped === "iron_axe") amount += CONFIG.axeIronBonus;
     else if (player.equipped === "gold_axe") amount += CONFIG.axeGoldBonus;
     else if (player.equipped === "diamond_axe") amount += CONFIG.axeDiamondBonus;
-    const addedWood = giveItem(player, "wood", amount);
-    player.score += addedWood * CONFIG.pointsWood;
+    const wanted = Math.min(amount, res.amount);
+    const addedWood = giveItem(player, "wood", wanted);
+    if (addedWood > 0) {
+      res.amount -= addedWood;
+      changedOres.add(index);
+      player.score += addedWood * CONFIG.pointsWood;
+    }
   } else if (res.type === "rock") {
     // Stein: mit JEDER Spitzhacke abbaubar (auch bloße Hand), aber höhere
     // Spitzhacken-Stufen holen mehr pro Schlag (1/1/2/3/4, siehe CONFIG).
@@ -1590,14 +1643,20 @@ function harvestResource(player, res, index) {
       player.score += added * CONFIG.pointsStone;
     }
   } else if (res.type === "iron_ore") {
-    // Erz abbauen profitiert genauso von der Spitzhacke wie Stein
+    // Erz abbauen profitiert genauso von der Spitzhacke wie Stein.
+    // Begrenzter Vorrat, der nachwächst.
     let amount = CONFIG.orePerHit;
     if (player.equipped === "pickaxe") amount += CONFIG.pickaxeStoneBonus;
     else if (player.equipped === "iron_pickaxe") amount += CONFIG.pickaxeIronBonus;
     else if (player.equipped === "gold_pickaxe") amount += CONFIG.pickaxeGoldBonus;
     else if (player.equipped === "diamond_pickaxe") amount += CONFIG.pickaxeDiamondBonus;
-    const addedIron = giveItem(player, "iron_ore", amount);
-    player.score += addedIron * CONFIG.pointsIron;
+    const wanted = Math.min(amount, res.amount);
+    const addedIron = giveItem(player, "iron_ore", wanted);
+    if (addedIron > 0) {
+      res.amount -= addedIron;
+      changedOres.add(index);
+      player.score += addedIron * CONFIG.pointsIron;
+    }
   } else if (res.type === "gold_ore") {
     // Gold: braucht mindestens eine Spitzhacke (bloße Hand bekommt nichts) —
     // wie im Wiki: "gathered with a stone pickaxe or higher".
@@ -1622,11 +1681,15 @@ function harvestResource(player, res, index) {
     }
   } else if (res.type === "sand_pile") {
     // Sand: mit der Schaufel gibt's mehr, wie im Wiki ("using a shovel,
-    // you can harvest sand"). Unbegrenzt, wie Bäume — kein Vorrat, der
-    // ausgehen könnte.
+    // you can harvest sand"). Begrenzter Vorrat, der nachwächst.
     let amount = CONFIG.sandPerHit;
     if (player.equipped === "shovel") amount += CONFIG.shovelSandBonus;
-    giveItem(player, "sand", amount);
+    const wanted = Math.min(amount, res.amount);
+    const added = giveItem(player, "sand", wanted);
+    if (added > 0) {
+      res.amount -= added;
+      changedOres.add(index);
+    }
   } else if (res.type === "bush" && res.berries > 0) {
     const added = giveItem(player, "berry", 1);
     if (added > 0) {

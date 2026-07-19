@@ -877,6 +877,9 @@ function drawResource(res) {
   const y = res.y;
 
   if (res.type === "tree") {
+    // Fast abgeholzte Bäume wirken etwas blasser (amount/maxAmount)
+    ctx.save();
+    ctx.globalAlpha *= resourceAlpha(res);
     // Stamm
     ctx.fillStyle = "#7a5230";
     ctx.strokeStyle = "#000";
@@ -898,8 +901,9 @@ function drawResource(res) {
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.32, y - res.radius * 0.35, res.radius * 0.4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   } else if (res.type === "bush") {
-    // Strauch
+    // Strauch (größere Sträucher tragen mehr Beeren, siehe res.maxBerries)
     ctx.fillStyle = "#4caf50";
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 4;
@@ -907,9 +911,10 @@ function drawResource(res) {
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // Beeren: kräftiges Rot mit schwarzer Kontur
+    // Beeren: kräftiges Rot mit schwarzer Kontur. Feste 8 Positionen rund um
+    // den Strauch (genug für kleine wie große Sträucher), nicht alle belegt.
     for (let i = 0; i < res.berries; i++) {
-      const angle = (i / 4) * Math.PI * 2 + 0.5;
+      const angle = (i / 8) * Math.PI * 2 + 0.5;
       const bx = x + Math.cos(angle) * res.radius * 0.5;
       const by = y + Math.sin(angle) * res.radius * 0.5;
       ctx.fillStyle = "#e53935";
@@ -927,11 +932,21 @@ function drawResource(res) {
   }
 }
 
+// Wie blass eine Ressource mit begrenztem Vorrat wirkt (fast leer -> blasser).
+// Ressourcen ohne Vorrat-Feld (z.B. Beerensträucher) bleiben voll sichtbar.
+function resourceAlpha(res) {
+  if (!(res.maxAmount > 0)) return 1;
+  const fullness = clamp01(res.amount / res.maxAmount);
+  return 0.55 + 0.45 * fullness;
+}
+
 // Sand-Häufchen am Strand: ein heller Sandhügel mit ein paar kleinen
 // Muscheln/Steinchen, dezent im Stil der übrigen Ressourcen (dicke
-// schwarze Kontur, kleines Glanzlicht).
+// schwarze Kontur, kleines Glanzlicht). Fast abgetragene Häufchen wirken
+// etwas blasser (amount/maxAmount).
 function drawSandPile(res, x, y) {
   ctx.save();
+  ctx.globalAlpha *= resourceAlpha(res);
   ctx.strokeStyle = "#000";
   ctx.lineWidth = 3.5;
 
@@ -1010,8 +1025,7 @@ const ORE_ITEM_ID = { rock: "stone", iron_ore: "iron_ore", gold_ore: "gold_ore",
 // einem dunkleren Rand derselben Farbe statt eines starren Schwarz-Randes.
 // Fast leere Vorkommen wirken etwas blasser (amount/maxAmount).
 function drawOreDeposit(res, x, y) {
-  const fullness = res.maxAmount > 0 ? clamp01(res.amount / res.maxAmount) : 1;
-  const alpha = 0.55 + 0.45 * fullness; // fast leer -> etwas ausgeblichen
+  const alpha = resourceAlpha(res); // fast leer -> etwas ausgeblichen
 
   const item = ITEMS[ORE_ITEM_ID[res.type]];
   const main = (item && item.color) || "#9e9e9e";

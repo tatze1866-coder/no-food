@@ -2,6 +2,28 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-19 — Klein/groß-Vorkommen + begrenzter Vorrat für alle Ressourcen (Branch `main`)
+
+### Geändert
+- **Kein Rohstoff mehr unendlich abbaubar**: Bäume, Eisenerz und Sandhügel
+  hatten bisher keinen Vorrat (endloses Abbauen an derselben Stelle) — jetzt
+  haben sie wie Stein/Gold/Diamant ein `amount`/`maxAmount` und wachsen alle
+  `CONFIG.oreRegenInterval` (10s) langsam nach. Wer eine Stelle leer geerntet
+  hat, muss weiterziehen, statt dort auf Nachschub zu warten. Neuer
+  gemeinsamer Katalog `RESOURCE_POOLS` (`server.js`) fasst Item, Vorrat und
+  Nachwachs-Menge pro Rohstoff-Typ zusammen; `spawnPointResource()` erzeugt
+  daraus jedes einzelne Vorkommen.
+- **Jedes Vorkommen ist zufällig klein oder groß** (`CONFIG.resourceLargeChance`,
+  25%): große Vorkommen haben mehr Vorrat, ein größeres Sprite und wachsen
+  doppelt so schnell nach. Gilt jetzt einheitlich für Bäume, Steine, Eisen-
+  und Golderz, Diamant, Sandhügel — und auch für Beerensträucher (mehr
+  Beeren statt mehr `amount`, eigene `bushMaxBerries`/`bushRadius`-Config).
+- Bot-KI erkennt jetzt generell leere Vorkommen (`botTargetValid`/
+  `botPickResource` nutzen `RESOURCE_POOLS` statt nur Stein zu prüfen) —
+  vorher hätten Bots an einem leeren Baum/Eisenerz hängen bleiben können.
+- Client: fast erschöpfte Bäume und Sandhügel wirken jetzt genauso blass wie
+  Erz-Vorkommen (gemeinsamer Helfer `resourceAlpha()` in `js/game.js`).
+
 ## 2026-07-19 — Einheitliche Erz-Optik + Minimap-Punkte (Branch `main`)
 
 ### Geändert
