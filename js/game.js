@@ -705,6 +705,9 @@ function refreshRecipeMenu(me) {
     }
     costEl.innerHTML = parts.join(" &nbsp; ");
     row.classList.toggle("disabled", !affordable);
+    // Baubare Rezepte per Flexbox-Order nach oben rücken (DOM-Reihenfolge
+    // bleibt gleich, nur die Anzeige-Position ändert sich)
+    row.style.order = affordable ? "0" : "1";
   }
 }
 
@@ -736,6 +739,13 @@ function render() {
   drawGrid();
   drawRivers();
   drawWorldBorder();
+
+  // Warm-/Licht-Schein um jedes brennende Lagerfeuer, BEVOR die Objekte
+  // gezeichnet werden — zeigt genau den Radius, in dem man Wärme + Heilung
+  // bekommt (CONFIG.campfireRadius, serverseitig identisch für nearCampfire).
+  for (const s of structures) {
+    if (s.type === "campfire" && s.fuelPct > 0) drawCampfireGlow(s);
+  }
 
   // Ressourcen, Lagerfeuer, Tiere und Spieler nach Y-Position sortieren,
   // damit weiter unten stehende Dinge "davor" gezeichnet werden
@@ -877,6 +887,9 @@ function drawResource(res) {
   const y = res.y;
 
   if (res.type === "tree") {
+    // Fast abgeholzte Bäume wirken etwas blasser (amount/maxAmount)
+    ctx.save();
+    ctx.globalAlpha *= resourceAlpha(res);
     // Stamm
     ctx.fillStyle = "#7a5230";
     ctx.strokeStyle = "#000";
@@ -898,8 +911,9 @@ function drawResource(res) {
     ctx.beginPath();
     ctx.arc(x - res.radius * 0.32, y - res.radius * 0.35, res.radius * 0.4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   } else if (res.type === "bush") {
-    // Strauch
+    // Strauch (größere Sträucher tragen mehr Beeren, siehe res.maxBerries)
     ctx.fillStyle = "#4caf50";
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 4;
@@ -907,9 +921,10 @@ function drawResource(res) {
     ctx.arc(x, y, res.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // Beeren: kräftiges Rot mit schwarzer Kontur
+    // Beeren: kräftiges Rot mit schwarzer Kontur. Feste 8 Positionen rund um
+    // den Strauch (genug für kleine wie große Sträucher), nicht alle belegt.
     for (let i = 0; i < res.berries; i++) {
-      const angle = (i / 4) * Math.PI * 2 + 0.5;
+      const angle = (i / 8) * Math.PI * 2 + 0.5;
       const bx = x + Math.cos(angle) * res.radius * 0.5;
       const by = y + Math.sin(angle) * res.radius * 0.5;
       ctx.fillStyle = "#e53935";
@@ -920,18 +935,28 @@ function drawResource(res) {
       ctx.fill();
       ctx.stroke();
     }
-  } else if (res.type === "rock" || res.type === "gold_ore" || res.type === "diamond") {
+  } else if (res.type === "rock" || res.type === "iron_ore" || res.type === "gold_ore" || res.type === "diamond") {
     drawOreDeposit(res, x, y);
   } else if (res.type === "sand_pile") {
     drawSandPile(res, x, y);
   }
 }
 
+// Wie blass eine Ressource mit begrenztem Vorrat wirkt (fast leer -> blasser).
+// Ressourcen ohne Vorrat-Feld (z.B. Beerensträucher) bleiben voll sichtbar.
+function resourceAlpha(res) {
+  if (!(res.maxAmount > 0)) return 1;
+  const fullness = clamp01(res.amount / res.maxAmount);
+  return 0.55 + 0.45 * fullness;
+}
+
 // Sand-Häufchen am Strand: ein heller Sandhügel mit ein paar kleinen
 // Muscheln/Steinchen, dezent im Stil der übrigen Ressourcen (dicke
-// schwarze Kontur, kleines Glanzlicht).
+// schwarze Kontur, kleines Glanzlicht). Fast abgetragene Häufchen wirken
+// etwas blasser (amount/maxAmount).
 function drawSandPile(res, x, y) {
   ctx.save();
+  ctx.globalAlpha *= resourceAlpha(res);
   ctx.strokeStyle = "#000";
   ctx.lineWidth = 3.5;
 
@@ -989,79 +1014,80 @@ function octagonPath(x, y, r) {
   ctx.closePath();
 }
 
-// Stein-, Gold- und Diamant-Vorkommen zeichnen. Farbe hängt vom Biom ab
-// (im Schnee heller/blasser, wie im Wiki: zwei sichtbar unterschiedliche
-// Varianten pro Vorkommen). Fast leere Vorkommen wirken etwas blasser.
+// Eine Hex-Farbe abdunkeln (amount: 0 = unverändert, 1 = schwarz).
+// Für den Rand der Erz-Vorkommen: derselbe Farbton wie die Füllung,
+// nur dunkler, statt eines starren Schwarz-Randes.
+function darkenColor(hex, amount) {
+  const num = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.round(((num >> 16) & 0xff) * (1 - amount)));
+  const g = Math.max(0, Math.round(((num >> 8) & 0xff) * (1 - amount)));
+  const b = Math.max(0, Math.round((num & 0xff) * (1 - amount)));
+  return "rgb(" + r + "," + g + "," + b + ")";
+}
+
+// Welches Item liefert dieses Erz-Vorkommen? Die Grundfarbe kommt aus
+// demselben ITEMS-Katalog wie die Inventar-Kachel (color-Feld) — Welt und
+// Inventar zeigen also für jeden Rohstoff immer dieselbe Farbe.
+const ORE_ITEM_ID = { rock: "stone", iron_ore: "iron_ore", gold_ore: "gold_ore", diamond: "diamond" };
+
+// Stein-, Eisen-, Gold- und Diamant-Vorkommen zeichnen: alle in derselben
+// Achteck-Form — nur die Farbpalette unterscheidet sich pro Rohstoff, mit
+// einem dunkleren Rand derselben Farbe statt eines starren Schwarz-Randes.
+// Fast leere Vorkommen wirken etwas blasser (amount/maxAmount).
 function drawOreDeposit(res, x, y) {
-  const biome = biomeAt(res.x, res.y);
-  const fullness = res.maxAmount > 0 ? clamp01(res.amount / res.maxAmount) : 1;
-  const alpha = 0.55 + 0.45 * fullness; // fast leer -> etwas ausgeblichen
+  const alpha = resourceAlpha(res); // fast leer -> etwas ausgeblichen
+
+  const item = ITEMS[ORE_ITEM_ID[res.type]];
+  const main = (item && item.color) || "#9e9e9e";
+  const border = darkenColor(main, 0.5);
+  const facet = darkenColor(main, 0.25);
 
   ctx.save();
   ctx.globalAlpha *= alpha;
-  ctx.strokeStyle = "#000";
 
-  if (res.type === "rock") {
-    ctx.lineWidth = 4;
-    ctx.fillStyle = biome === "snow" ? "#e2ebea" : "#8f9a86";
-    octagonPath(x, y, res.radius);
-    ctx.fill();
-    ctx.stroke();
-    // Facetten-Schattierung (dunklerer Achteck-Ausschnitt unten rechts)
-    ctx.fillStyle = biome === "snow" ? "#c7d4d2" : "#767f6d";
-    ctx.beginPath();
-    ctx.arc(x + res.radius * 0.22, y + res.radius * 0.28, res.radius * 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    // Glanzlicht
-    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-    ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (res.type === "gold_ore") {
-    ctx.lineWidth = 4;
-    ctx.fillStyle = biome === "snow" ? "#ece1a6" : "#a89a3f";
-    octagonPath(x, y, res.radius);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = biome === "snow" ? "#dfd189" : "#8f8230";
-    ctx.beginPath();
-    ctx.arc(x + res.radius * 0.22, y + res.radius * 0.28, res.radius * 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
-    ctx.beginPath();
-    ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (res.type === "diamond") {
-    // Kristall-Cluster: drei spitze Kristalle unterschiedlicher Höhe
-    ctx.lineWidth = 3.5;
-    ctx.fillStyle = "#5fd8cf";
-    const shard = (dx, h, w) => {
-      ctx.beginPath();
-      ctx.moveTo(x + dx, y + res.radius * 0.5);
-      ctx.lineTo(x + dx - w, y + res.radius * 0.5 - h * 0.55);
-      ctx.lineTo(x + dx, y - res.radius * 0.5 - h);
-      ctx.lineTo(x + dx + w, y + res.radius * 0.5 - h * 0.55);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    };
-    shard(-res.radius * 0.45, res.radius * 1.15, res.radius * 0.32);
-    shard(res.radius * 0.15, res.radius * 1.55, res.radius * 0.4);
-    shard(res.radius * 0.65, res.radius * 0.95, res.radius * 0.28);
-    // Facetten-Glanz
-    ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.beginPath();
-    ctx.moveTo(x - res.radius * 0.05, y - res.radius * 1.4);
-    ctx.lineTo(x + res.radius * 0.15, y - res.radius * 0.5);
-    ctx.lineTo(x - res.radius * 0.15, y - res.radius * 0.5);
-    ctx.closePath();
-    ctx.fill();
-  }
+  ctx.lineWidth = 4;
+  ctx.fillStyle = main;
+  ctx.strokeStyle = border;
+  octagonPath(x, y, res.radius);
+  ctx.fill();
+  ctx.stroke();
+
+  // Facetten-Schattierung (dunklerer Achteck-Ausschnitt unten rechts)
+  ctx.fillStyle = facet;
+  ctx.beginPath();
+  ctx.arc(x + res.radius * 0.22, y + res.radius * 0.28, res.radius * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Glanzlicht
+  ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+  ctx.beginPath();
+  ctx.arc(x - res.radius * 0.3, y - res.radius * 0.3, res.radius * 0.26, 0, Math.PI * 2);
+  ctx.fill();
+
   ctx.restore();
 }
 
 function clamp01(v) {
   return Math.max(0, Math.min(1, v));
+}
+
+// Weicher gelber Schein im Wärmeradius eines Lagerfeuers (CONFIG.campfireRadius).
+// Flackert leicht mit derselben Formel wie die Flamme selbst und wird mit
+// sinkendem Brennstoff (fuelPct) schwächer/kleiner.
+function drawCampfireGlow(s) {
+  const radius = CONFIG.campfireRadius || 130;
+  const flicker = 0.85 + Math.sin(performance.now() / 90 + s.id) * 0.15;
+  const r = radius * (0.7 + 0.3 * s.fuelPct) * flicker;
+
+  const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+  grad.addColorStop(0, "rgba(255, 200, 80, 0.28)");
+  grad.addColorStop(0.7, "rgba(255, 170, 60, 0.12)");
+  grad.addColorStop(1, "rgba(255, 170, 60, 0)");
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // Eine Struktur zeichnen: Lagerfeuer (Holzscheite + flackernde Flamme),
@@ -1393,6 +1419,21 @@ function drawMinimap() {
       }
       ctx.stroke();
     }
+  }
+
+  // Erz-Vorkommen (Stein, Eisen, Gold, Diamant) als kleine Punkte in ihrer
+  // Rohstoff-Farbe — praktisch, um Abbau-Stellen auf der Karte wiederzufinden.
+  // Leere Vorkommen (amount <= 0) werden nicht angezeigt.
+  for (const res of resources) {
+    const itemId = ORE_ITEM_ID[res.type];
+    if (!itemId) continue;
+    if (res.maxAmount > 0 && (res.amount || 0) <= 0) continue;
+    const item = ITEMS[itemId];
+    const p = worldToMinimap(res.x, res.y, x0, y0, scale);
+    ctx.fillStyle = (item && item.color) || "#9e9e9e";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // Tiere als kleine rötliche Punkte (grobe Gefahren-/Beute-Übersicht)
