@@ -5,6 +5,18 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 ## Unveröffentlicht (Branch `main`)
 
 ### Hinzugefügt
+- **Eigenes Icon für Sand** (`assets/sand.png`): kleiner Sandhügel in zwei
+  Brauntönen (heller oben/links, dunkler unten/rechts) mit ein paar
+  Sandkörner-Sprenkeln, statt nur dem 🏖️-Emoji in der Inventar-/Crafting-UI.
+- **`assets/crab.png` und `assets/king-crab.png` neu gezeichnet**: gleicher
+  Sticker-Look wie die Werkzeug-/Tier-Icons — rundes Krabben-Köpfchen mit
+  Antennen-Fransen oben, große Scherenzangen und Kulleraugen mit
+  Glanzlicht. Die normale Krabbe hat einen leichten Schlagschatten fürs
+  Sticker-Gefühl, die Königskrabbe ist dunkler/kräftiger eingefärbt und
+  ohne Schatten. Beide Sprites sind gleich zugeschnitten, die Königskrabbe
+  wirkt automatisch größer, weil ihr Kollisionsradius (30) schon größer
+  ist als der der normalen Krabbe (22) — `SPRITE_SCALE` in `js/game.js`
+  skaliert beide gleich, multipliziert aber mit dem Radius.
 - **Eigene Icons für Eisen-, Gold- und Diamant-Werkzeuge** (Axt, Spitzhacke,
   Speer, Schwert): Sprites lagen bereits in `assets/` (z.B.
   `tool-axe-iron.png`), waren aber noch keinem Item zugeordnet — Kommentar

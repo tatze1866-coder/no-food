@@ -186,7 +186,7 @@ const ITEMS = {
   iron_ore:    { name: "Eisenerz",        icon: "⚙️" },
   gold_ore:    { name: "Golderz",         icon: "🥇" },
   diamond:     { name: "Diamant",         icon: "💎" },
-  sand:        { name: "Sand",            icon: "🏖️" },
+  sand:        { name: "Sand",            icon: "🏖️", image: "assets/sand.png" },
 
   // Werkzeuge (ausrüstbar) — "image" zeigt auf ein eigenes Icon-Bild,
   // das der Client statt des Emojis anzeigt (icon bleibt als Fallback).
@@ -368,6 +368,7 @@ const FILES = {
   "/assets/crab-helmet.png": ["assets/crab-helmet.png", "image/png"],
   "/assets/crab-claws.png": ["assets/crab-claws.png", "image/png"],
   "/assets/crab-sticks.png": ["assets/crab-sticks.png", "image/png"],
+  "/assets/sand.png": ["assets/sand.png", "image/png"],
 };
 
 const server = http.createServer((req, res) => {
