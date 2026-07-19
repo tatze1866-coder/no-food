@@ -94,12 +94,13 @@ const CONFIG = {
   playerDamage: 20,       // Grundschaden des Spieler-Schlags gegen Tiere
   // Tiere nur 4x so viele wie früher (nicht 15x): Sie werden 20x pro Sekunde
   // an alle Browser geschickt — zu viele würden das Netzwerk überlasten.
-  rabbitCount: 32,        // Hasen im Wald (neutral, fliehen)
-  spiderCount: 20,        // Spinnen im Wald (nur NACHTS feindlich)
-  wolfCount: 16,          // Wölfe im Wald (immer feindlich)
-  arcticFoxCount: 14,     // Polarfüchse im Schnee (immer feindlich, schnell)
-  polarBearCount: 10,     // Eisbären im Schnee (immer feindlich, viel Leben)
-  mammothCount: 3,        // Mammuts im Schnee (Mini-Boss: sehr selten, sehr stark)
+  // (Nochmal verdoppelt gegenüber der ursprünglichen 4x-Anzahl.)
+  rabbitCount: 64,        // Hasen im Wald (neutral, fliehen)
+  spiderCount: 60,        // Spinnen im Wald (nur NACHTS feindlich)
+  wolfCount: 67,          // Wölfe im Wald (immer feindlich)
+  arcticFoxCount: 28,     // Polarfüchse im Schnee (immer feindlich, schnell)
+  polarBearCount: 20,     // Eisbären im Schnee (immer feindlich, viel Leben)
+  mammothCount: 6,        // Mammuts im Schnee (Mini-Boss: sehr selten, sehr stark)
   animalRespawn: 30,      // Sekunden bis ein getötetes Tier neu spawnt
   aggroRange: 260,        // Ab dieser Entfernung verfolgen feindliche Tiere
   fleeRange: 150,         // Ab dieser Entfernung fliehen Hasen vor Spielern
@@ -110,6 +111,7 @@ const CONFIG = {
   // --- Item-/Crafting-System (Claude) -------------------------------
   capacity: 20,           // Obergrenze pro Item-Sorte im Inventar
   backpackCapacity: 40,   // Obergrenze mit Rucksack
+  bulkCapacity: 9999,     // Obergrenze für Holz/Stein/Eisen/Gold/Diamant (siehe BULK_ITEMS)
   woodPerHit: 1,          // Holz pro Baum-Schlag mit bloßer Hand
   stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
   orePerHit: 1,           // Erz pro Schlag mit bloßer Hand (mit Spitzhacke deutlich mehr)
@@ -162,8 +164,8 @@ const CONFIG = {
   shovelSandBonus: 3,     // Extra-Sand mit der Schaufel
 
   // Krabben (Strand-Tiere, nach Wiki-Vorlage)
-  crabCount: 26,           // Krabben am Strand (neutral, bis man sie angreift)
-  kingCrabCount: 6,        // Königskrabben am Strand (seltener, stärker)
+  crabCount: 52,           // Krabben am Strand (neutral, bis man sie angreift)
+  kingCrabCount: 12,       // Königskrabben am Strand (seltener, stärker)
   crabSpearHealAmount: 40, // Heilung pro Treffer mit dem Krabbenspeer
   spearCrabDamageBonus: 26, // Schaden-Bonus des Krabbenspeers (zwischen Holz- und Eisen-Speer)
   crabStickFood: 20,       // Krabbenstäbchen: 5 Stück füllen den Hunger komplett (20% je Stück)
@@ -247,27 +249,27 @@ const ITEMS = {
 // ---------- RECIPES: Crafting-Rezepte ----------
 // Jedes Rezept: was es kostet (cost) und was dabei herauskommt (result).
 const RECIPES = {
-  axe:      { name: "Holz Axt",        cost: { wood: 3, stone: 3 },  result: { axe: 1 } },
-  pickaxe:  { name: "Holz Spitzhacke", cost: { wood: 3, stone: 5 },  result: { pickaxe: 1 } },
-  sword:    { name: "Holz Schwert",    cost: { wood: 4, stone: 4 },  result: { sword: 1 } },
-  spear:    { name: "Holz Speer",      cost: { wood: 5, stone: 5 },  result: { spear: 1 } },
+  axe:      { name: "Holz Axt",        cost: { wood: 3, stone: 3 },  result: { axe: 1 },      craftPoints: 100 },
+  pickaxe:  { name: "Holz Spitzhacke", cost: { wood: 3, stone: 5 },  result: { pickaxe: 1 },  craftPoints: 100 },
+  sword:    { name: "Holz Schwert",    cost: { wood: 4, stone: 4 },  result: { sword: 1 },    craftPoints: 100 },
+  spear:    { name: "Holz Speer",      cost: { wood: 5, stone: 5 },  result: { spear: 1 },    craftPoints: 100 },
 
-  iron_axe:     { name: "Eisen Axt",        cost: { wood: 3, iron_ore: 4 }, result: { iron_axe: 1 } },
-  iron_pickaxe: { name: "Eisen Spitzhacke", cost: { wood: 3, iron_ore: 6 }, result: { iron_pickaxe: 1 } },
-  iron_sword:   { name: "Eisen Schwert",    cost: { wood: 4, iron_ore: 5 }, result: { iron_sword: 1 } },
-  iron_spear:   { name: "Eisen Speer",      cost: { wood: 5, iron_ore: 6 }, result: { iron_spear: 1 } },
+  iron_axe:     { name: "Eisen Axt",        cost: { wood: 3, iron_ore: 4 }, result: { iron_axe: 1 },     craftPoints: 300 },
+  iron_pickaxe: { name: "Eisen Spitzhacke", cost: { wood: 3, iron_ore: 6 }, result: { iron_pickaxe: 1 }, craftPoints: 300 },
+  iron_sword:   { name: "Eisen Schwert",    cost: { wood: 4, iron_ore: 5 }, result: { iron_sword: 1 },   craftPoints: 300 },
+  iron_spear:   { name: "Eisen Speer",      cost: { wood: 5, iron_ore: 6 }, result: { iron_spear: 1 },   craftPoints: 300 },
 
-  gold_axe:     { name: "Gold Axt",         cost: { wood: 3, gold_ore: 5 }, result: { gold_axe: 1 } },
-  gold_pickaxe: { name: "Gold Spitzhacke",  cost: { wood: 3, gold_ore: 7 }, result: { gold_pickaxe: 1 } },
-  gold_sword:   { name: "Gold Schwert",     cost: { wood: 4, gold_ore: 6 }, result: { gold_sword: 1 } },
-  gold_spear:   { name: "Gold Speer",       cost: { wood: 5, gold_ore: 7 }, result: { gold_spear: 1 } },
+  gold_axe:     { name: "Gold Axt",         cost: { wood: 3, gold_ore: 5 }, result: { gold_axe: 1 },     craftPoints: 1000 },
+  gold_pickaxe: { name: "Gold Spitzhacke",  cost: { wood: 3, gold_ore: 7 }, result: { gold_pickaxe: 1 }, craftPoints: 1000 },
+  gold_sword:   { name: "Gold Schwert",     cost: { wood: 4, gold_ore: 6 }, result: { gold_sword: 1 },   craftPoints: 1000 },
+  gold_spear:   { name: "Gold Speer",       cost: { wood: 5, gold_ore: 7 }, result: { gold_spear: 1 },   craftPoints: 1000 },
 
-  diamond_axe:     { name: "Diamant Axt",        cost: { wood: 3, diamond: 4 }, result: { diamond_axe: 1 } },
-  diamond_pickaxe: { name: "Diamant Spitzhacke", cost: { wood: 3, diamond: 6 }, result: { diamond_pickaxe: 1 } },
-  diamond_sword:   { name: "Diamant Schwert",    cost: { wood: 4, diamond: 5 }, result: { diamond_sword: 1 } },
-  diamond_spear:   { name: "Diamant Speer",      cost: { wood: 5, diamond: 6 }, result: { diamond_spear: 1 } },
+  diamond_axe:     { name: "Diamant Axt",        cost: { wood: 3, diamond: 4 }, result: { diamond_axe: 1 },     craftPoints: 2500 },
+  diamond_pickaxe: { name: "Diamant Spitzhacke", cost: { wood: 3, diamond: 6 }, result: { diamond_pickaxe: 1 }, craftPoints: 2500 },
+  diamond_sword:   { name: "Diamant Schwert",    cost: { wood: 4, diamond: 5 }, result: { diamond_sword: 1 },   craftPoints: 2500 },
+  diamond_spear:   { name: "Diamant Speer",      cost: { wood: 5, diamond: 6 }, result: { diamond_spear: 1 },   craftPoints: 2500 },
 
-  shovel:      { name: "Schaufel",       cost: { wood: 3, stone: 3 },   result: { shovel: 1 } },
+  shovel:      { name: "Schaufel",       cost: { wood: 3, stone: 3 },   result: { shovel: 1 }, craftPoints: 100 },
   crab_spear:  { name: "Krabbenspeer",   cost: { wood: 5, crab_claws: 5, stone: 2 }, result: { crab_spear: 1 } },
   crab_helmet: { name: "Krabbenhelm",    cost: { crab_claws: 10, crab_sticks: 10, stone: 6 }, result: { crab_helmet: 1 } },
 
@@ -701,15 +703,22 @@ function countItem(player, id) {
   return player.inventory[id] || 0;
 }
 
-// Die aktuelle Obergrenze pro Item-Sorte (mit Rucksack höher)
-function capacityFor(player) {
+// Rohstoffe, die man in großen Mengen horten kann (Stacks bis 9999) —
+// alles andere (Fleisch, Beeren, Werkzeuge, Felle ...) bleibt bei der
+// normalen Obergrenze (capacity/backpackCapacity).
+const BULK_ITEMS = new Set(["wood", "stone", "iron_ore", "gold_ore", "diamond"]);
+
+// Die aktuelle Obergrenze pro Item-Sorte (mit Rucksack höher; Holz, Stein,
+// Erze und Diamant haben einen eigenen, viel höheren Stack-Deckel).
+function capacityFor(player, id) {
+  if (BULK_ITEMS.has(id)) return CONFIG.bulkCapacity;
   return countItem(player, "backpack") > 0 ? CONFIG.backpackCapacity : CONFIG.capacity;
 }
 
 // Ein Item hinzufügen, aber nie über die Obergrenze hinaus.
 // Gibt zurück, wie viel wirklich Platz gefunden hat.
 function giveItem(player, id, n) {
-  const max = capacityFor(player);
+  const max = capacityFor(player, id);
   const have = countItem(player, id);
   const room = Math.max(0, max - have);
   const added = Math.min(n, room);
@@ -784,6 +793,8 @@ function craft(player, recipeId) {
   for (const id in recipe.result) {
     giveItem(player, id, recipe.result[id]);
   }
+  // Leaderboard-Punkte fürs Craften (nur Werkzeug-Stufen, siehe craftPoints)
+  if (recipe.craftPoints) player.score += recipe.craftPoints;
 }
 
 // Ein Werkzeug in die Hand nehmen (oder mit null weglegen)

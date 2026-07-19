@@ -5,6 +5,15 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 ## Unveröffentlicht (Branch `main`)
 
 ### Hinzugefügt
+- **Punkte fürs Craften**: Werkzeug-Stufen geben beim Bauen zusätzliche
+  Leaderboard-Punkte — Holz-Stufe (Axt/Spitzhacke/Schwert/Speer/Schaufel)
+  100 Punkte, Eisen-Stufe 300, Gold-Stufe 1000, Diamant-Stufe 2500
+  (`craftPoints` je Rezept in `RECIPES`, vergeben in `craft()`).
+- **Große Stacks für Rohstoffe**: Holz, Stein, Eisenerz, Golderz und
+  Diamant können jetzt bis zu **9999** pro Sorte gesammelt werden
+  (`BULK_ITEMS`/`CONFIG.bulkCapacity` in `server.js`) — alle anderen Items
+  (Essen, Werkzeuge, Felle ...) bleiben bei der normalen Obergrenze
+  (20, mit Rucksack 40).
 - **Rangliste (Leaderboard) oben rechts**: zeigt die Top 5 Spieler nach
   Punkten. Punkte gibt's fürs Sammeln (1 Holz = 1 Punkt, 1 Stein = 1 Punkt,
   1 Eisenerz = 5 Punkte, 1 Golderz = 10 Punkte, 1 Diamant = 100 Punkte) und
@@ -26,6 +35,9 @@ Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
   anderen beiden.
 
 ### Geändert
+- **Tier-Spawns verdoppelt**: Hasen 32→64, Spinnen 20→60, Wölfe 16→67,
+  Polarfüchse 14→28, Eisbären 10→20, Mammuts 3→6, Krabben 26→52,
+  Königskrabben 6→12 (`CONFIG` in `server.js`).
 - **Leben/Hunger/Kälte-Balken** stehen jetzt nebeneinander statt
   untereinander (`#bars` in `style.css`: `flex-direction: row`).
 
