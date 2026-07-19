@@ -178,20 +178,20 @@ const ITEMS = {
   sword:       { name: "Holz Schwert",    icon: "🗡️", image: "assets/tool-sword.png",   tool: true },
   spear:       { name: "Holz Speer",      icon: "🔱", image: "assets/tool-spear.png",   tool: true },
 
-  iron_axe:     { name: "Eisen Axt",        icon: "🪓", image: "assets/tool-axe-iron.png",     tool: true },
-  iron_pickaxe: { name: "Eisen Spitzhacke", icon: "⛏️", image: "assets/tool-pickaxe-iron.png", tool: true },
-  iron_sword:   { name: "Eisen Schwert",    icon: "🗡️", image: "assets/tool-sword-iron.png",   tool: true },
-  iron_spear:   { name: "Eisen Speer",      icon: "🔱", image: "assets/tool-spear-iron.png",   tool: true },
+  iron_axe:     { name: "Eisen Axt",        icon: "🪓", tool: true },
+  iron_pickaxe: { name: "Eisen Spitzhacke", icon: "⛏️", tool: true },
+  iron_sword:   { name: "Eisen Schwert",    icon: "🗡️", tool: true },
+  iron_spear:   { name: "Eisen Speer",      icon: "🔱", tool: true },
 
-  gold_axe:     { name: "Gold Axt",         icon: "🪓", image: "assets/tool-axe-gold.png",     tool: true },
-  gold_pickaxe: { name: "Gold Spitzhacke",  icon: "⛏️", image: "assets/tool-pickaxe-gold.png", tool: true },
-  gold_sword:   { name: "Gold Schwert",     icon: "🗡️", image: "assets/tool-sword-gold.png",   tool: true },
-  gold_spear:   { name: "Gold Speer",       icon: "🔱", image: "assets/tool-spear-gold.png",   tool: true },
+  gold_axe:     { name: "Gold Axt",         icon: "🪓", tool: true },
+  gold_pickaxe: { name: "Gold Spitzhacke",  icon: "⛏️", tool: true },
+  gold_sword:   { name: "Gold Schwert",     icon: "🗡️", tool: true },
+  gold_spear:   { name: "Gold Speer",       icon: "🔱", tool: true },
 
-  diamond_axe:     { name: "Diamant Axt",        icon: "🪓", image: "assets/tool-axe-diamond.png",     tool: true },
-  diamond_pickaxe: { name: "Diamant Spitzhacke", icon: "⛏️", image: "assets/tool-pickaxe-diamond.png", tool: true },
-  diamond_sword:   { name: "Diamant Schwert",    icon: "🗡️", image: "assets/tool-sword-diamond.png",   tool: true },
-  diamond_spear:   { name: "Diamant Speer",      icon: "🔱", image: "assets/tool-spear-diamond.png",   tool: true },
+  diamond_axe:     { name: "Diamant Axt",        icon: "🪓", tool: true },
+  diamond_pickaxe: { name: "Diamant Spitzhacke", icon: "⛏️", tool: true },
+  diamond_sword:   { name: "Diamant Schwert",    icon: "🗡️", tool: true },
+  diamond_spear:   { name: "Diamant Speer",      icon: "🔱", tool: true },
 
   // Platzierbar / Upgrade
   campfire:    { name: "Lagerfeuer",      icon: "🔥" },
@@ -308,18 +308,6 @@ const FILES = {
   "/assets/tool-pickaxe.png": ["assets/tool-pickaxe.png", "image/png"],
   "/assets/tool-sword.png": ["assets/tool-sword.png", "image/png"],
   "/assets/tool-spear.png": ["assets/tool-spear.png", "image/png"],
-  "/assets/tool-axe-iron.png": ["assets/tool-axe-iron.png", "image/png"],
-  "/assets/tool-pickaxe-iron.png": ["assets/tool-pickaxe-iron.png", "image/png"],
-  "/assets/tool-sword-iron.png": ["assets/tool-sword-iron.png", "image/png"],
-  "/assets/tool-spear-iron.png": ["assets/tool-spear-iron.png", "image/png"],
-  "/assets/tool-axe-gold.png": ["assets/tool-axe-gold.png", "image/png"],
-  "/assets/tool-pickaxe-gold.png": ["assets/tool-pickaxe-gold.png", "image/png"],
-  "/assets/tool-sword-gold.png": ["assets/tool-sword-gold.png", "image/png"],
-  "/assets/tool-spear-gold.png": ["assets/tool-spear-gold.png", "image/png"],
-  "/assets/tool-axe-diamond.png": ["assets/tool-axe-diamond.png", "image/png"],
-  "/assets/tool-pickaxe-diamond.png": ["assets/tool-pickaxe-diamond.png", "image/png"],
-  "/assets/tool-sword-diamond.png": ["assets/tool-sword-diamond.png", "image/png"],
-  "/assets/tool-spear-diamond.png": ["assets/tool-spear-diamond.png", "image/png"],
 };
 
 const server = http.createServer((req, res) => {
