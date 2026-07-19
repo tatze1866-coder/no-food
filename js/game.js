@@ -25,6 +25,7 @@ const CONFIG = {
   playerRadius: 24,
   reach: 65,
   hitCooldown: 0.4,
+  hitMargin: 35, // Extra-Trefferzone rund um Ressourcen (ein Schlag kann mehrere treffen)
   maxHealth: 100,
   maxHunger: 100,
   capacity: 20,
@@ -179,7 +180,8 @@ window.addEventListener("keydown", (e) => {
 
 // Benutzt das Item im Hotbar-Slot mit der Nummer index + 1.
 // Was passiert, hängt von der Art des Items ab:
-// Werkzeug anlegen/weglegen, Essen essen, Lagerfeuer aufstellen.
+// Werkzeug anlegen/weglegen, Essen essen, platzierbare Items
+// (Lagerfeuer, Wände …) aufstellen.
 // Rohstoffe (Holz, Stein, Felle …) kann man nicht direkt benutzen.
 function useHotbarSlot(index) {
   const me = players.get(myId);
@@ -196,8 +198,8 @@ function useHotbarSlot(index) {
     sendMessage({ t: "equipArmor", item: me.armor === id ? null : id });
   } else if (item && item.food) {
     sendMessage({ t: "eat", item: id });
-  } else if (id === "campfire") {
-    sendMessage({ t: "place", item: "campfire" });
+  } else if (item && item.placeable) {
+    sendMessage({ t: "place", item: id });
   }
 }
 window.addEventListener("keyup", (e) => {
@@ -463,21 +465,24 @@ function update(dt) {
 }
 
 // Wackel-Animation beim eigenen Schlag sofort anzeigen, ohne auf den
-// Server zu warten (sucht wie der Server das nächste Ziel: Ressource oder Tier).
+// Server zu warten. Wie der Server kann ein Schlag MEHRERE Ressourcen
+// gleichzeitig treffen (alle im Abstand < radius + hitMargin zum
+// Trefferpunkt) — Tiere bleiben ein Einzelziel (nur das nächste),
+// Strukturen/Wände wackeln gar nicht.
 function predictShake(me) {
   const hitX = me.x + Math.cos(ownAngle()) * CONFIG.reach;
   const hitY = me.y + Math.sin(ownAngle()) * CONFIG.reach;
 
-  let closest = null;
-  let closestDist = Infinity;
+  // Alle getroffenen Ressourcen wackeln (Mehrfach-Ernte wie auf dem Server)
   for (const res of resources) {
     const d = Math.hypot(hitX - res.x, hitY - res.y);
-    if (d < res.radius + 20 && d < closestDist) {
-      closest = res;
-      closestDist = d;
+    if (d < res.radius + CONFIG.hitMargin) {
+      res.shake = 1;
     }
   }
-  // Auch Tiere können getroffen werden
+  // Tiere: nur das nächste Tier in Reichweite wackelt
+  let closest = null;
+  let closestDist = Infinity;
   for (const a of animals.values()) {
     const d = Math.hypot(hitX - a.x, hitY - a.y);
     if (d < a.radius + 20 && d < closestDist) {
@@ -1059,10 +1064,76 @@ function clamp01(v) {
   return Math.max(0, Math.min(1, v));
 }
 
-// Ein Lagerfeuer zeichnen: Holzscheite + flackernde Flamme
+// Eine Struktur zeichnen: Lagerfeuer (Holzscheite + flackernde Flamme),
+// Holzwand (Palisade) oder Steinwand — je nach s.type.
+// Wände haben zusätzlich healthPct (0..1): unter 0.6 mit Rissen gezeichnet.
 function drawStructure(s) {
-  if (s.type !== "campfire") return;
   const x = s.x, y = s.y;
+
+  if (s.type === "wood_wall") {
+    // Holzwand: braune Palisaden-Konstruktion als Kreis
+    const r = 28;
+    ctx.fillStyle = "#8d6e42";
+    ctx.strokeStyle = "#5d4037";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Senkrechte Bretter als dunklere Striche
+    ctx.strokeStyle = "#6d4c2f";
+    ctx.lineWidth = 5;
+    for (const bx of [-r * 0.5, 0, r * 0.5]) {
+      ctx.beginPath();
+      ctx.moveTo(x + bx, y - r * 0.75);
+      ctx.lineTo(x + bx, y + r * 0.75);
+      ctx.stroke();
+    }
+    // Angeschlagene Wand: dunkle Riss-Striche
+    if (s.healthPct < 0.6) {
+      ctx.strokeStyle = "#3e2723";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.3, y - r * 0.5);
+      ctx.lineTo(x + r * 0.1, y + r * 0.4);
+      ctx.moveTo(x + r * 0.4, y - r * 0.3);
+      ctx.lineTo(x + r * 0.1, y + r * 0.6);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (s.type === "stone_wall") {
+    // Steinwand: graue Steinwall
+    const r = 28;
+    ctx.fillStyle = "#9e9e9e";
+    ctx.strokeStyle = "#616161";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Hellere Stein-Details
+    ctx.fillStyle = "#bdbdbd";
+    ctx.beginPath();
+    ctx.arc(x - r * 0.35, y - r * 0.3, r * 0.22, 0, Math.PI * 2);
+    ctx.arc(x + r * 0.3, y + r * 0.35, r * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    // Angeschlagene Wand: dunkle Riss-Striche
+    if (s.healthPct < 0.6) {
+      ctx.strokeStyle = "#424242";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.3, y - r * 0.5);
+      ctx.lineTo(x + r * 0.1, y + r * 0.4);
+      ctx.moveTo(x + r * 0.4, y - r * 0.3);
+      ctx.lineTo(x + r * 0.1, y + r * 0.6);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (s.type !== "campfire") return;
 
   // Steinring
   ctx.fillStyle = "#8d8d8d";

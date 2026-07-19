@@ -12,7 +12,7 @@
 //   3. Statischer Dateiserver (liefert index.html, style.css, game.js, assets)
 //   4. Welt (Biome, Ressourcen, Tiere + Tag/Nacht)
 //   5. Spieler-Verwaltung (Inventar, beitreten, essen, crafting, respawn)
-//   5b. Bots (KI-Mitspieler: sammeln, bauen, überleben wie echte Spieler)
+//   5b. Bots (KI-Mitspieler: sammeln, bauen, Basen, überleben)
 //   6. Spiel-Logik (Tick: Bewegung, Kollision, Schlagen, Hunger, Tiere, Lagerfeuer)
 //   7. Netzwerk (Nachrichten empfangen und an alle senden)
 //   8. Spiel-Schleife (Server-Tick)
@@ -30,6 +30,8 @@ const CONFIG = {
   playerRadius: 24,       // Größe des Spielers
   reach: 65,              // Wie weit der Spieler schlagen kann
   hitCooldown: 0.4,       // Sekunden zwischen zwei Schlägen
+  hitMargin: 35,          // Treffer-„Aufschlag" beim Ressourcen-Abbau — war vorher fest 20;
+                          // größer, damit angrenzende Ressourcen zusammen getroffen werden
 
   maxHealth: 100,
   maxHunger: 100,
@@ -232,8 +234,11 @@ const ITEMS = {
   diamond_sword:   { name: "Diamant Schwert",    icon: "🗡️", image: "assets/tool-sword-diamond.png",   tool: true },
   diamond_spear:   { name: "Diamant Speer",      icon: "🔱", image: "assets/tool-spear-diamond.png",   tool: true },
 
-  // Platzierbar / Upgrade
-  campfire:    { name: "Lagerfeuer",      icon: "🔥" },
+  // Platzierbar / Upgrade — "placeable: true" heißt: kann in der Welt
+  // aufgestellt werden (siehe placeItem)
+  campfire:    { name: "Lagerfeuer",      icon: "🔥", placeable: true },
+  wood_wall:   { name: "Holzwand",        icon: "🟫", placeable: true },
+  stone_wall:  { name: "Steinwand",       icon: "🧱", placeable: true },
   backpack:    { name: "Rucksack",        icon: "🎒" },
 
   // Tier-Drops (Fleisch fällt schon von Tieren; Felle sind für spätere
@@ -283,6 +288,8 @@ const RECIPES = {
 
   campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
   backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
+  wood_wall: { name: "Holzwand", cost: { wood: 3 }, result: { wood_wall: 1 } },
+  stone_wall: { name: "Steinwand", cost: { wood: 1, stone: 5 }, result: { stone_wall: 1 } },
   // Kochen: braucht rohes Fleisch (von Tieren) UND Nähe zum Lagerfeuer
   cooked_meat: {
     name: "Fleisch braten",
@@ -291,6 +298,11 @@ const RECIPES = {
     requiresNear: "campfire",
   },
 };
+
+// ---------- WALL_TYPES: Wand-Arten ----------
+// Wände sind platzierbare, zerstörbare Strukturen (siehe placeItem/tryHit):
+// sie blockieren Spieler UND Tiere. radius = Hitbox, health = Leben.
+const WALL_TYPES = { wood_wall: { radius: 28, health: 120 }, stone_wall: { radius: 28, health: 300 } };
 
 // ---------- Tier-Arten ----------
 // hostile: "never" = nie feindlich, "night" = nur nachts, "always" = immer.
@@ -829,23 +841,44 @@ function equipArmor(player, itemId) {
   }
 }
 
-// Ein Lagerfeuer vor dem Spieler platzieren (verbraucht 1 Lagerfeuer)
+// Ein platzierbares Item vor dem Spieler aufstellen (verbraucht 1 Stück).
+// Gilt für jedes Item mit "placeable: true" im ITEMS-Katalog: Lagerfeuer
+// (brennt mit der Zeit ab) und Wände (blockieren, haben Leben).
 function placeItem(player, itemId) {
   if (player.dead) return;
-  if (itemId !== "campfire") return;
-  if (countItem(player, "campfire") <= 0) return;
+  if (!ITEMS[itemId] || !ITEMS[itemId].placeable) return;
+  if (countItem(player, itemId) <= 0) return;
 
-  takeItems(player, { campfire: 1 });
   // Etwas vor den Spieler setzen (in Blickrichtung)
-  const px = player.x + Math.cos(player.angle) * 50;
-  const py = player.y + Math.sin(player.angle) * 50;
-  structures.push({
-    id: nextStructureId++,
-    type: "campfire",
-    x: Math.round(clamp(px, 0, CONFIG.worldSize)),
-    y: Math.round(clamp(py, 0, CONFIG.worldSize)),
-    fuel: CONFIG.campfireBurnTime,
-  });
+  const px = Math.round(clamp(player.x + Math.cos(player.angle) * 50, 0, CONFIG.worldSize));
+  const py = Math.round(clamp(player.y + Math.sin(player.angle) * 50, 0, CONFIG.worldSize));
+
+  // Zusätzliche Regeln nur für Wände
+  if (WALL_TYPES[itemId]) {
+    // (a) nicht im Ozean bauen
+    if (biomeAt(px, py).name === "ocean") return;
+    // (b) Mindestabstand zu anderen Wänden: 50 px
+    for (const s of structures) {
+      if (!WALL_TYPES[s.type]) continue;
+      if (dist(px, py, s.x, s.y) < 50) return;
+    }
+  }
+
+  takeItems(player, { [itemId]: 1 });
+  if (itemId === "campfire") {
+    // Lagerfeuer wie bisher: brennt mit der Zeit ab (fuel)
+    structures.push({ id: nextStructureId++, type: "campfire", x: px, y: py, fuel: CONFIG.campfireBurnTime });
+  } else if (WALL_TYPES[itemId]) {
+    // Wände haben Leben und können mit Schlägen zerstört werden (siehe tryHit)
+    structures.push({
+      id: nextStructureId++,
+      type: itemId,
+      x: px,
+      y: py,
+      health: WALL_TYPES[itemId].health,
+      maxHealth: WALL_TYPES[itemId].health,
+    });
+  }
 }
 
 // ---------- 5b. BOTS (KI-Mitspieler, von Kimi) ----------
@@ -884,6 +917,11 @@ function spawnBots() {
       lastY: p.y,
       detourTimer: 0,     // > 0: Umweg-Modus aktiv
       detourSign: 1,
+      // Basis-Bau: 8 Holzwände im Kreis (Radius 120) um ein einmal gewähltes Zentrum
+      baseCenter: null,   // Zentrum der Basis (Position beim ersten Bau-Schritt)
+      baseWalls: 0,       // Wie viele der 8 Wand-Plätze gesetzt/übersprungen sind
+      baseDone: false,    // true = Basis fertig (danach nur noch Holz hamstern)
+      placeTimer: 0,      // Wartezeit beim Platzieren (nach 3 s Platz überspringen)
     };
   }
 }
@@ -985,6 +1023,11 @@ function botThink(player, dt) {
       bot.goalIndex = 0;
       bot.target = null;
       bot.targetItem = null;
+      // Auch die halb fertige Basis vergessen — der Bot fängt von vorn an
+      bot.baseCenter = null;
+      bot.baseWalls = 0;
+      bot.baseDone = false;
+      bot.placeTimer = 0;
     }
     return;
   }
@@ -1033,40 +1076,85 @@ function botThink(player, dt) {
           break;
         }
       }
+    } else if (!bot.baseDone) {
+      // Ausrüstungs-Leiter fertig: jetzt eine Basis aus 8 Holzwänden im
+      // Kreis (Radius 120) um ein einmal gewähltes Zentrum bauen
+      if (bot.baseCenter === null) bot.baseCenter = { x: player.x, y: player.y };
+      if (countItem(player, "wood_wall") < 1) {
+        // Keine Wand auf Lager: Holz sammeln und daraus Wände bauen
+        // (craft prüft selbst, ob es bezahlbar ist)
+        needed = "wood";
+        craft(player, "wood_wall");
+      }
+      // Wand im Inventar: unten beim Platzieren weiter (needed bleibt null)
     } else {
-      needed = "wood"; // Leiter fertig: Bots hamstern weiter fleißig Holz
+      needed = "wood"; // Leiter + Basis fertig: Bots hamstern weiter fleißig Holz
     }
 
-    // Anvisierte Ressource noch brauchbar? Sonst eine neue suchen
-    if (!botTargetValid(player) || bot.targetItem !== needed) {
-      bot.target = botPickResource(player, needed);
-      bot.targetItem = bot.target ? needed : null;
-    }
-
-    if (bot.target) {
-      const res = bot.target;
-      const d = dist(res.x, res.y, player.x, player.y);
-      if (d <= res.radius + 50) {
-        // An der Ressource: draufhalten und schlagen (tryHit hat eigene Sperre)
-        player.angle = Math.atan2(res.y - player.y, res.x - player.x);
-        tryHit(player);
+    // Trägt der Bot eine Wand, hat das Aufstellen Vorrang vor dem Sammeln —
+    // dann wird auch kein Ressourcen-Ziel aus der Sammel-Logik stehen gelassen.
+    if (needed !== "berry" && goalId === null && !bot.baseDone && countItem(player, "wood_wall") >= 1) {
+      bot.target = null;
+      bot.targetItem = null;
+      // Platz Nummer baseWalls auf dem Kreis um das Zentrum
+      const spotAngle = (bot.baseWalls / 8) * Math.PI * 2;
+      const spotX = bot.baseCenter.x + Math.cos(spotAngle) * 120;
+      const spotY = bot.baseCenter.y + Math.sin(spotAngle) * 120;
+      if (dist(spotX, spotY, player.x, player.y) > 60) {
+        // Noch zu weit weg: zum Platz hinlaufen
+        moveAngle = Math.atan2(spotY - player.y, spotX - player.x);
       } else {
-        moveAngle = Math.atan2(res.y - player.y, res.x - player.x);
+        // Angekommen: in Richtung des Platzes schauen und die Wand aufstellen
+        player.angle = Math.atan2(spotY - player.y, spotX - player.x);
+        placeItem(player, "wood_wall");
+        if (countItem(player, "wood_wall") === 0) {
+          // Geklappt: die Wand ist weg — nächster Platz
+          bot.baseWalls++;
+          bot.placeTimer = 0;
+        } else {
+          // Klappt nicht (z.B. Platz im Ozean oder zu dicht an einer anderen
+          // Wand): 3 s lang weiter versuchen, dann den Platz überspringen —
+          // sonst würde der Bot hier dauerhaft festhängen
+          bot.placeTimer += dt;
+          if (bot.placeTimer >= 3) {
+            bot.baseWalls++;
+            bot.placeTimer = 0;
+          }
+        }
+        if (bot.baseWalls >= 8) bot.baseDone = true;
       }
     } else {
-      // Nichts zu tun / keine Ressource in Reichweite: umherwandern.
-      // Bots bleiben gern im Wald — außerhalb steuern sie zurück zur Mitte.
-      bot.wanderTimer -= dt;
-      if (bot.wanderTimer <= 0) {
-        bot.wanderTimer = rand(2, 4);
-        if (biomeAt(player.x, player.y).name !== "forest") {
-          const home = spawnPoint();
-          bot.wanderAngle = Math.atan2(home.y - player.y, home.x - player.x);
-        } else {
-          bot.wanderAngle = rand(0, Math.PI * 2);
-        }
+      // Anvisierte Ressource noch brauchbar? Sonst eine neue suchen
+      if (!botTargetValid(player) || bot.targetItem !== needed) {
+        bot.target = botPickResource(player, needed);
+        bot.targetItem = bot.target ? needed : null;
       }
-      moveAngle = bot.wanderAngle;
+
+      if (bot.target) {
+        const res = bot.target;
+        const d = dist(res.x, res.y, player.x, player.y);
+        if (d <= res.radius + 50) {
+          // An der Ressource: draufhalten und schlagen (tryHit hat eigene Sperre)
+          player.angle = Math.atan2(res.y - player.y, res.x - player.x);
+          tryHit(player);
+        } else {
+          moveAngle = Math.atan2(res.y - player.y, res.x - player.x);
+        }
+      } else {
+        // Nichts zu tun / keine Ressource in Reichweite: umherwandern.
+        // Bots bleiben gern im Wald — außerhalb steuern sie zurück zur Mitte.
+        bot.wanderTimer -= dt;
+        if (bot.wanderTimer <= 0) {
+          bot.wanderTimer = rand(2, 4);
+          if (biomeAt(player.x, player.y).name !== "forest") {
+            const home = spawnPoint();
+            bot.wanderAngle = Math.atan2(home.y - player.y, home.x - player.x);
+          } else {
+            bot.wanderAngle = rand(0, Math.PI * 2);
+          }
+        }
+        moveAngle = bot.wanderAngle;
+      }
     }
   }
 
@@ -1155,6 +1243,7 @@ function update(dt) {
     // Bäume, Steine, Erze und Sträucher haben Hitboxen: man kann nicht mehr
     // durch sie hindurchlaufen. Überlappt der Spieler eine Ressource, wird er
     // auf ihren Rand zurückgeschoben (so rutscht man an ihr entlang).
+    // Platzierte Wände blockieren ebenfalls — gleiche Logik direkt danach.
     for (const res of resources) {
       const minDist = CONFIG.playerRadius + res.radius;
       const ddx = player.x - res.x;
@@ -1168,6 +1257,27 @@ function update(dt) {
         const uy = d > 0.001 ? ddy / d : 0;
         player.x = res.x + ux * minDist;
         player.y = res.y + uy * minDist;
+      }
+    }
+
+    // --- Kollision mit Wänden ---
+    // Wände blockieren ebenfalls: gleiche Push-out-Logik wie oben bei den
+    // Ressourcen, nur mit dem Wand-Radius aus WALL_TYPES.
+    for (const s of structures) {
+      const wallType = WALL_TYPES[s.type];
+      if (!wallType) continue;
+      const minDist = CONFIG.playerRadius + wallType.radius;
+      const ddx = player.x - s.x;
+      if (ddx > minDist || ddx < -minDist) continue;   // grober Vorab-Check …
+      const ddy = player.y - s.y;
+      if (ddy > minDist || ddy < -minDist) continue;   // … spart das Wurzelziehen
+      const d = Math.hypot(ddx, ddy);
+      if (d < minDist) {
+        // Auf den Rand schieben (steht er genau mittig drin: nach rechts)
+        const ux = d > 0.001 ? ddx / d : 1;
+        const uy = d > 0.001 ? ddy / d : 0;
+        player.x = s.x + ux * minDist;
+        player.y = s.y + uy * minDist;
       }
     }
 
@@ -1327,6 +1437,25 @@ function moveAnimal(animal, angle, speed, dt) {
     animal.y += Math.sin(angle) * speed * dt;
     animal.x = clamp(animal.x, biome.x + type.radius, biome.x + biome.w - type.radius);
     animal.y = clamp(animal.y, biome.y + type.radius, biome.y + biome.h - type.radius);
+
+    // Basen halten Tiere ab: Wände schieben sie heraus (gleiche
+    // Push-out-Logik wie beim Spieler in update(), nur mit dem Tier-Radius)
+    for (const s of structures) {
+      const wallType = WALL_TYPES[s.type];
+      if (!wallType) continue;
+      const minDist = type.radius + wallType.radius;
+      const ddx = animal.x - s.x;
+      if (ddx > minDist || ddx < -minDist) continue;
+      const ddy = animal.y - s.y;
+      if (ddy > minDist || ddy < -minDist) continue;
+      const d = Math.hypot(ddx, ddy);
+      if (d < minDist) {
+        const ux = d > 0.001 ? ddx / d : 1;
+        const uy = d > 0.001 ? ddy / d : 0;
+        animal.x = s.x + ux * minDist;
+        animal.y = s.y + uy * minDist;
+      }
+    }
   }
   animal.angle = angle; // Blickrichtung auch im Stopp aktualisieren
 }
@@ -1420,7 +1549,98 @@ function updateAnimal(animal, dt) {
   }
 }
 
-// Prüfen ob der Schlag eine Ressource oder ein Tier trifft
+// Schaden eines Schlages gegen Tiere und Wände: Grundschaden plus
+// Waffen-Bonus (Speer/Schwert, je nach ausgerüsteter Stufe).
+function hitDamage(player) {
+  let damage = CONFIG.playerDamage;
+  if (player.equipped === "spear") damage += CONFIG.spearDamageBonus;
+  else if (player.equipped === "iron_spear") damage += CONFIG.spearIronDamageBonus;
+  else if (player.equipped === "gold_spear") damage += CONFIG.spearGoldDamageBonus;
+  else if (player.equipped === "diamond_spear") damage += CONFIG.spearDiamondDamageBonus;
+  else if (player.equipped === "crab_spear") damage += CONFIG.spearCrabDamageBonus;
+  else if (player.equipped === "sword") damage += CONFIG.swordDamageBonus;
+  else if (player.equipped === "iron_sword") damage += CONFIG.swordIronDamageBonus;
+  else if (player.equipped === "gold_sword") damage += CONFIG.swordGoldDamageBonus;
+  else if (player.equipped === "diamond_sword") damage += CONFIG.swordDiamondDamageBonus;
+  return damage;
+}
+
+// Die Ausbeute EINER getroffenen Ressource gutschreiben. Wird von tryHit
+// je getroffener Ressource aufgerufen — es können mehrere gleichzeitig sein.
+function harvestResource(player, res, index) {
+  if (res.type === "tree") {
+    // Mit Axt gibt's mehr Holz — Eisen mehr als Holz, Gold mehr als Eisen, Diamant am meisten
+    let amount = CONFIG.woodPerHit;
+    if (player.equipped === "axe") amount += CONFIG.axeWoodBonus;
+    else if (player.equipped === "iron_axe") amount += CONFIG.axeIronBonus;
+    else if (player.equipped === "gold_axe") amount += CONFIG.axeGoldBonus;
+    else if (player.equipped === "diamond_axe") amount += CONFIG.axeDiamondBonus;
+    const addedWood = giveItem(player, "wood", amount);
+    player.score += addedWood * CONFIG.pointsWood;
+  } else if (res.type === "rock") {
+    // Stein: mit JEDER Spitzhacke abbaubar (auch bloße Hand), aber höhere
+    // Spitzhacken-Stufen holen mehr pro Schlag (1/1/2/3/4, siehe CONFIG).
+    // Das Vorkommen hat einen begrenzten Vorrat, der nachwächst.
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.stoneYieldByTier[tier], res.amount);
+    const added = giveItem(player, "stone", wanted);
+    if (added > 0) {
+      res.amount -= added;
+      changedOres.add(index);
+      player.score += added * CONFIG.pointsStone;
+    }
+  } else if (res.type === "iron_ore") {
+    // Erz abbauen profitiert genauso von der Spitzhacke wie Stein
+    let amount = CONFIG.orePerHit;
+    if (player.equipped === "pickaxe") amount += CONFIG.pickaxeStoneBonus;
+    else if (player.equipped === "iron_pickaxe") amount += CONFIG.pickaxeIronBonus;
+    else if (player.equipped === "gold_pickaxe") amount += CONFIG.pickaxeGoldBonus;
+    else if (player.equipped === "diamond_pickaxe") amount += CONFIG.pickaxeDiamondBonus;
+    const addedIron = giveItem(player, "iron_ore", amount);
+    player.score += addedIron * CONFIG.pointsIron;
+  } else if (res.type === "gold_ore") {
+    // Gold: braucht mindestens eine Spitzhacke (bloße Hand bekommt nichts) —
+    // wie im Wiki: "gathered with a stone pickaxe or higher".
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.goldYieldByTier[tier], res.amount);
+    const added = giveItem(player, "gold_ore", wanted);
+    if (added > 0) {
+      res.amount -= added;
+      changedOres.add(index);
+      player.score += added * CONFIG.pointsGold;
+    }
+  } else if (res.type === "diamond") {
+    // Diamant: braucht mindestens eine Gold-Spitzhacke — wie im Wiki:
+    // "can gather it with only a gold or above pickaxe".
+    const tier = pickaxeTier(player.equipped);
+    const wanted = Math.min(CONFIG.diamondYieldByTier[tier], res.amount);
+    const added = giveItem(player, "diamond", wanted);
+    if (added > 0) {
+      res.amount -= added;
+      changedOres.add(index);
+      player.score += added * CONFIG.pointsDiamond;
+    }
+  } else if (res.type === "sand_pile") {
+    // Sand: mit der Schaufel gibt's mehr, wie im Wiki ("using a shovel,
+    // you can harvest sand"). Unbegrenzt, wie Bäume — kein Vorrat, der
+    // ausgehen könnte.
+    let amount = CONFIG.sandPerHit;
+    if (player.equipped === "shovel") amount += CONFIG.shovelSandBonus;
+    giveItem(player, "sand", amount);
+  } else if (res.type === "bush" && res.berries > 0) {
+    const added = giveItem(player, "berry", 1);
+    if (added > 0) {
+      res.berries--;
+      changedBushes.add(index);
+    }
+  }
+}
+
+// Prüfen, was der Schlag trifft: Ressourcen, Tiere oder Wände.
+// Ressourcen: MEHRERE gleichzeitig möglich — alle in Reichweite
+// (Radius + hitMargin) werden geerntet. Tiere und Wände bleiben EINZELZIELE
+// (nur das jeweils nächste, Aufschlag +20). Vorrang wie bisher „nächstes
+// Ziel gewinnt": Tier vor Wand vor Ressourcen.
 function tryHit(player) {
   if (player.dead || player.hitTimer > 0) return;
   player.hitTimer = CONFIG.hitCooldown;
@@ -1429,37 +1649,48 @@ function tryHit(player) {
   const hitX = player.x + Math.cos(player.angle) * CONFIG.reach;
   const hitY = player.y + Math.sin(player.angle) * CONFIG.reach;
 
-  // Das nächste Ziel in Reichweite finden: Ressource ODER Tier
-  let closest = null;        // Ressource
-  let closestIndex = -1;
-  let closestAnimal = null;  // Tier
-  let closestDist = Infinity;
+  // Getroffene Ressourcen einsammeln und die nächsten Einzelziele suchen
+  const hits = [];             // getroffene Ressourcen: [Ressource, Nummer]
+  let resourceDist = Infinity; // Abstand der NÄCHSTEN Ressource (für den Vorrang)
+  let closestAnimal = null;    // Tier (Einzelziel)
+  let animalDist = Infinity;
+  let closestWall = null;      // Wand (Einzelziel)
+  let wallDist = Infinity;
   for (let i = 0; i < resources.length; i++) {
     const res = resources[i];
     const d = dist(hitX, hitY, res.x, res.y);
-    if (d < res.radius + 20 && d < closestDist) {
-      closest = res;
-      closestIndex = i;
-      closestAnimal = null;
-      closestDist = d;
+    if (d < res.radius + CONFIG.hitMargin) {
+      hits.push([res, i]);
+      if (d < resourceDist) resourceDist = d;
     }
   }
   for (const animal of animals) {
     if (animal.dead) continue;
     const type = ANIMAL_TYPES[animal.species];
     const d = dist(hitX, hitY, animal.x, animal.y);
-    if (d < type.radius + 20 && d < closestDist) {
+    if (d < type.radius + 20 && d < animalDist) {
       closestAnimal = animal;
-      closest = null;
-      closestIndex = -1;
-      closestDist = d;
+      animalDist = d;
+    }
+  }
+  for (const s of structures) {
+    const wallType = WALL_TYPES[s.type];
+    if (!wallType) continue;
+    const d = dist(hitX, hitY, s.x, s.y);
+    // Wände gibt's nur gezielt: der Trefferpunkt muss IN der Wand liegen
+    // (kein +20-Aufschlag) — sonst würde man beim Ernten daneben stehender
+    // Ressourcen ständig aus Versehen Wände demolieren
+    if (d < wallType.radius && d < wallDist) {
+      closestWall = s;
+      wallDist = d;
     }
   }
 
-  // Ein Tier getroffen: es verliert Leben und lässt Beute fallen (rohes
-  // Fleisch/Fell oder — bei Krabben — eigene Drops). Mit ausgerüstetem
-  // Speer richtet der Schlag mehr Schaden an.
-  if (closestAnimal) {
+  // Vorrang 1: trifft der Schlag ein Tier und ist das Tier näher am
+  // Trefferpunkt als die nächste Ressource und die nächste Wand, wird NUR
+  // das Tier getroffen. Es verliert Leben und lässt Beute fallen (rohes
+  // Fleisch/Fell oder — bei Krabben — eigene Drops).
+  if (closestAnimal && animalDist < resourceDist && animalDist < wallDist) {
     const type = ANIMAL_TYPES[closestAnimal.species];
     const isCrab = closestAnimal.species === "crab" || closestAnimal.species === "kingCrab";
 
@@ -1476,17 +1707,7 @@ function tryHit(player) {
     // "wander around peacefully until they are attacked by a player").
     if (type.hostile === "onHit") closestAnimal.aggro = true;
 
-    let damage = CONFIG.playerDamage;
-    if (player.equipped === "spear") damage += CONFIG.spearDamageBonus;
-    else if (player.equipped === "iron_spear") damage += CONFIG.spearIronDamageBonus;
-    else if (player.equipped === "gold_spear") damage += CONFIG.spearGoldDamageBonus;
-    else if (player.equipped === "diamond_spear") damage += CONFIG.spearDiamondDamageBonus;
-    else if (player.equipped === "crab_spear") damage += CONFIG.spearCrabDamageBonus;
-    else if (player.equipped === "sword") damage += CONFIG.swordDamageBonus;
-    else if (player.equipped === "iron_sword") damage += CONFIG.swordIronDamageBonus;
-    else if (player.equipped === "gold_sword") damage += CONFIG.swordGoldDamageBonus;
-    else if (player.equipped === "diamond_sword") damage += CONFIG.swordDiamondDamageBonus;
-    closestAnimal.health -= damage;
+    closestAnimal.health -= hitDamage(player);
     if (closestAnimal.health <= 0) {
       closestAnimal.dead = true;
       closestAnimal.respawnTimer = CONFIG.animalRespawn;
@@ -1501,73 +1722,22 @@ function tryHit(player) {
     return;
   }
 
-  if (!closest) return;
+  // Vorrang 2: liegt eine Wand im Trefferbereich, wird NUR sie getroffen —
+  // auch wenn eine Ressource näher wäre. Sonst könnte eine Wand, die dicht
+  // an einem Baum/Stein steht, nie beschädigt werden (die Ressource würde
+  // jeden Schlag „abfangen"). Wände lassen NICHTS fallen — bei 0 Leben
+  // werden sie einfach entfernt (zerstört).
+  if (closestWall) {
+    closestWall.health -= hitDamage(player);
+    if (closestWall.health <= 0) {
+      structures.splice(structures.indexOf(closestWall), 1);
+    }
+    return;
+  }
 
-  if (closest.type === "tree") {
-    // Mit Axt gibt's mehr Holz — Eisen mehr als Holz, Gold mehr als Eisen, Diamant am meisten
-    let amount = CONFIG.woodPerHit;
-    if (player.equipped === "axe") amount += CONFIG.axeWoodBonus;
-    else if (player.equipped === "iron_axe") amount += CONFIG.axeIronBonus;
-    else if (player.equipped === "gold_axe") amount += CONFIG.axeGoldBonus;
-    else if (player.equipped === "diamond_axe") amount += CONFIG.axeDiamondBonus;
-    const addedWood = giveItem(player, "wood", amount);
-    player.score += addedWood * CONFIG.pointsWood;
-  } else if (closest.type === "rock") {
-    // Stein: mit JEDER Spitzhacke abbaubar (auch bloße Hand), aber höhere
-    // Spitzhacken-Stufen holen mehr pro Schlag (1/1/2/3/4, siehe CONFIG).
-    // Das Vorkommen hat einen begrenzten Vorrat, der nachwächst.
-    const tier = pickaxeTier(player.equipped);
-    const wanted = Math.min(CONFIG.stoneYieldByTier[tier], closest.amount);
-    const added = giveItem(player, "stone", wanted);
-    if (added > 0) {
-      closest.amount -= added;
-      changedOres.add(closestIndex);
-      player.score += added * CONFIG.pointsStone;
-    }
-  } else if (closest.type === "iron_ore") {
-    // Erz abbauen profitiert genauso von der Spitzhacke wie Stein
-    let amount = CONFIG.orePerHit;
-    if (player.equipped === "pickaxe") amount += CONFIG.pickaxeStoneBonus;
-    else if (player.equipped === "iron_pickaxe") amount += CONFIG.pickaxeIronBonus;
-    else if (player.equipped === "gold_pickaxe") amount += CONFIG.pickaxeGoldBonus;
-    else if (player.equipped === "diamond_pickaxe") amount += CONFIG.pickaxeDiamondBonus;
-    const addedIron = giveItem(player, "iron_ore", amount);
-    player.score += addedIron * CONFIG.pointsIron;
-  } else if (closest.type === "gold_ore") {
-    // Gold: braucht mindestens eine Spitzhacke (bloße Hand bekommt nichts) —
-    // wie im Wiki: "gathered with a stone pickaxe or higher".
-    const tier = pickaxeTier(player.equipped);
-    const wanted = Math.min(CONFIG.goldYieldByTier[tier], closest.amount);
-    const added = giveItem(player, "gold_ore", wanted);
-    if (added > 0) {
-      closest.amount -= added;
-      changedOres.add(closestIndex);
-      player.score += added * CONFIG.pointsGold;
-    }
-  } else if (closest.type === "diamond") {
-    // Diamant: braucht mindestens eine Gold-Spitzhacke — wie im Wiki:
-    // "can gather it with only a gold or above pickaxe".
-    const tier = pickaxeTier(player.equipped);
-    const wanted = Math.min(CONFIG.diamondYieldByTier[tier], closest.amount);
-    const added = giveItem(player, "diamond", wanted);
-    if (added > 0) {
-      closest.amount -= added;
-      changedOres.add(closestIndex);
-      player.score += added * CONFIG.pointsDiamond;
-    }
-  } else if (closest.type === "sand_pile") {
-    // Sand: mit der Schaufel gibt's mehr, wie im Wiki ("using a shovel,
-    // you can harvest sand"). Unbegrenzt, wie Bäume — kein Vorrat, der
-    // ausgehen könnte.
-    let amount = CONFIG.sandPerHit;
-    if (player.equipped === "shovel") amount += CONFIG.shovelSandBonus;
-    giveItem(player, "sand", amount);
-  } else if (closest.type === "bush" && closest.berries > 0) {
-    const added = giveItem(player, "berry", 1);
-    if (added > 0) {
-      closest.berries--;
-      changedBushes.add(closestIndex);
-    }
+  // Vorrang 3: ALLE Ressourcen in Reichweite gleichzeitig ernten
+  for (const [res, index] of hits) {
+    harvestResource(player, res, index);
   }
 }
 
@@ -1582,7 +1752,7 @@ function tryHit(player) {
 //   { t: "craft", recipe: "axe" }           Ein Rezept bauen
 //   { t: "equip", tool: "axe"|null }         Werkzeug ausrüsten / weglegen
 //   { t: "equipArmor", item: "crab_helmet"|null }  Rüstung anlegen / ablegen
-//   { t: "place", item: "campfire" }        Etwas platzieren (Lagerfeuer)
+//   { t: "place", item: "campfire" }        Etwas platzieren (campfire oder Wände: wood_wall/stone_wall)
 //   { t: "respawn" }                        Nach dem Tod neu starten
 //
 // Server -> Browser:
@@ -1665,15 +1835,22 @@ function stateMessage() {
     });
   }
 
-  // Lagerfeuer sind wenige — der Einfachheit halber alle mitschicken.
-  // fuelPct (0..1) reicht dem Browser für die Flammen-Anzeige.
-  const structureList = structures.map((s) => ({
-    id: s.id,
-    type: s.type,
-    x: s.x,
-    y: s.y,
-    fuelPct: Math.max(0, Math.min(1, s.fuel / CONFIG.campfireBurnTime)),
-  }));
+  // Strukturen sind wenige — der Einfachheit halber alle mitschicken.
+  // fuelPct geht bei JEDER Struktur mit: beim Lagerfeuer der echte
+  // Brennstoff-Stand (0..1, für die Flammen-Anzeige), bei Wänden immer 1 —
+  // dient dem Client als Struktur-Erkennung. Nur Wände bekommen zusätzlich
+  // healthPct (0..1) für ihre Schadens-Anzeige.
+  const structureList = structures.map((s) => {
+    const entry = {
+      id: s.id,
+      type: s.type,
+      x: s.x,
+      y: s.y,
+      fuelPct: s.type === "campfire" ? Math.max(0, Math.min(1, s.fuel / CONFIG.campfireBurnTime)) : 1,
+    };
+    if (WALL_TYPES[s.type]) entry.healthPct = s.health / s.maxHealth;
+    return entry;
+  });
 
   return {
     t: "state",
@@ -1717,6 +1894,7 @@ wss.on("connection", (ws) => {
           playerRadius: CONFIG.playerRadius,
           reach: CONFIG.reach,
           hitCooldown: CONFIG.hitCooldown,
+          hitMargin: CONFIG.hitMargin,
           maxHealth: CONFIG.maxHealth,
           maxHunger: CONFIG.maxHunger,
           capacity: CONFIG.capacity,

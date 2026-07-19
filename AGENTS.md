@@ -96,7 +96,18 @@ die Tabellen `stoneYieldByTier` (1/1/2/3/4), `goldYieldByTier` (0/1/2/3/4)
 und `diamondYieldByTier` (0/0/0/1/2) die Ausbeute pro Schlag — wie im Wiki:
 **Gold nur mit Spitzhacke, Diamant nur mit mindestens der Gold-Spitzhacke**.
 Alle Werkzeug-Stufen haben eigene Sprite-Bilder in `assets/` (`image` im
-`ITEMS`-Katalog).
+`ITEMS`-Katalog). Der Schlag selbst (`tryHit()`, Abschnitt 6) erntet seit
+dem Mehrfach-Abbau **alle Ressourcen** in Reichweite (`radius + hitMargin`,
+`hitMargin` 35 — vorher fest 20) gleichzeitig; die Ausbeute je Ressource
+steckt in `harvestResource()`. **Tiere** bleiben Einzelziele (Aufschlag
++20) und gewinnen, wenn sie das nächste Ziel sind. **Wände** werden nur
+gezielt getroffen (der Trefferpunkt muss IN der Wand liegen, kein
+Aufschlag), gewinnen dann aber **immer** gegenüber Ressourcen — sonst
+wären Wände dicht an Bäumen unverwundbar, weil die Ressource jeden Schlag
+abfängt. Den Schaden gegen Tiere und Wände berechnet
+`hitDamage()` (Grundschaden `playerDamage` plus Waffen-Bonus). `hitMargin`
+geht per `welcome`-Config an den Client (Mehrfach-Wackeln in
+`predictShake`).
 
 **Punkte und Rangliste:** Es gibt Punkte fürs Sammeln (Holz/Stein 1,
 Eisenerz 5, Golderz 10, Diamant 100 — `pointsWood` … `pointsDiamond`),
@@ -114,6 +125,22 @@ gibt es den **Krabbenhelm** (`crab_helmet`): Krabben greifen den Träger gar
 nicht an, gegen alle anderen Tiere reduziert er den Schaden pauschal
 (`crabHelmetDamageReduction` 5).
 
+**Wände:** Platzierbare Strukturen wie das Lagerfeuer — aufgestellt werden
+sie per Hotbar-Taste über `placeItem()`, das für jedes Item mit
+`placeable: true` im `ITEMS`-Katalog gilt (Lagerfeuer 🔥, **Holzwand**
+`wood_wall` 🟫, **Steinwand** `stone_wall` 🧱). Rezepte: Holzwand 3 Holz,
+Steinwand 1 Holz + 5 Stein. Die Werte stehen in `WALL_TYPES` (Abschnitt 1,
+direkt vor `ANIMAL_TYPES`): Holzwand Radius 28 / 120 Leben, Steinwand
+Radius 28 / 300 Leben. Wände **blockieren Spieler und Tiere** (s.
+Kollision) und können per Schlag **zerstört** werden (Schaden über
+`hitDamage()`, wie gegen Tiere) — sie lassen nichts fallen und werden bei
+0 Leben einfach entfernt. Platzier-Regeln in `placeItem()`: nicht im
+Ozean, 50 px Mindestabstand zu anderen Wänden. Im `state` gehen Strukturen
+als `structureList` mit: `fuelPct` bei **jeder** Struktur (Lagerfeuer:
+echter Brennstoff-Stand 0..1; Wände: immer 1 — dient dem Client als
+Struktur-Erkennung), `healthPct` (0..1) **nur bei Wänden**. Der Client
+zeichnet sie in `drawStructure()` und zeigt Risse ab `healthPct < 0.6`.
+
 **Kollision (Hitboxen):** Ressourcen (Bäume, Steine, Erze, Diamanten,
 Sträucher) und Spieler haben Hitboxen — man kann nicht mehr hindurchlaufen.
 Der Server löst Überlappungen im Tick auf (`update()`, Abschnitt 6): gegen
@@ -121,7 +148,10 @@ Ressourcen wird der Spieler auf deren Rand zurückgeschoben (so rutscht man
 an ihnen entlang), zwei Spieler werden weich je zur Hälfte
 auseinandergeschoben. Landet dabei jemand im Ozean, wird die Position
 zurückgesetzt — niemand wird ins Wasser geschubst. Tote Spieler blockieren
-nicht. Der Client brauchte dafür keine Änderung: der Server ist autoritativ.
+nicht. Auch **Wände** haben Hitboxen: sie schieben Spieler heraus (gleiche
+Push-out-Logik in `update()`) **und Tiere** (in `moveAnimal()` mit dem
+Tier-Radius) — Basen halten so feindliche Tiere ab. Der Client brauchte
+dafür keine Änderung: der Server ist autoritativ.
 
 **Bots (KI-Mitspieler):** Damit sich die Welt belebt anfühlt (und man
 Multiplayer ohne zweiten Menschen testen kann), spielen `CONFIG.botCount`
@@ -138,9 +168,15 @@ Eisen-Spitzhacke, Schwert, Rucksack) und sammeln dafür Holz, Stein,
 Eisenerz und Beeren (`BOT_GATHER`); sie essen bei Hunger < 40, holen bei
 Hunger < 65 ohne Essen erst Beeren, stellen bei `cold` > 50 ein Lagerfeuer
 auf und wärmen sich, fliehen vor feindlichen Tieren (`botFleeRange` 150)
-und wandern sonst im Wald umher. Klemmt ein Bot fest, läuft er kurz schräg
-auf einem Umweg weiter (Anti-Festklemmen-Logik); nach dem Tod startet er
-nach `botRespawn` (15 s) neu. Weitere Werte: `botGatherRange` 2500. Der
+und wandern sonst im Wald umher. Ist die Ausrüstungs-Leiter fertig, baut
+der Bot eine **Basis**: 8 Holzwände im Kreis (Radius 120) um ein einmal
+gewähltes Zentrum (`baseCenter`, `baseWalls`, `baseDone`) — er holzt
+zwischendurch für das Wand-Material und stellt die Wände selbst auf;
+klappt ein Platz 3 s lang nicht (z. B. weil er im Ozean liegt),
+überspringt er ihn (`placeTimer`). Klemmt ein Bot fest, läuft er kurz
+schräg auf einem Umweg weiter (Anti-Festklemmen-Logik); nach dem Tod
+startet er nach `botRespawn` (15 s) neu — die halb fertige Basis vergisst
+er dabei und fängt von vorn an. Weitere Werte: `botGatherRange` 2500. Der
 Client brauchte für die Bots keine Änderung.
 
 ## Zusammenarbeit mehrerer KI-Agenten (WICHTIG)
@@ -169,6 +205,8 @@ So können beide gleichzeitig tippen, ohne sich in die Quere zu kommen.
 2. **Nach der Arbeit sofort `git commit` + `git push`** (auf den eigenen Branch).
    Niemals Arbeit nur lokal liegen lassen — Git ist die *einzige* gemeinsame
    Wahrheit; die Agenten synchronisieren sich ausschließlich über GitHub.
+   **Vor jedem Push zuerst `git fetch`** und prüfen, ob die Remote weiter
+   ist — ggf. erst pullen/mergen, dann pushen.
 3. **Aussagekräftige deutsche Commit-Nachrichten** (was geändert, warum).
 4. Vor größeren Umbauten (neue Architektur, neue Abhängigkeit, geänderter
    Spielablauf) den Nutzer **kurz um Bestätigung fragen**.
@@ -253,10 +291,11 @@ bei Änderungen synchron gehalten werden.
   Build-Artefakte).
 - Alle **Spielwerte gehören in `CONFIG`** (oben in `server.js`), nicht als
   Magic Numbers im restlichen Code. Der Client bekommt die für die Anzeige
-  nötigen Werte per `welcome`-Nachricht vom Server. Ausnahme: Schwellwert `70`
-  für die Regeneration und `+ 20` Toleranz beim Treffer-Check in `tryHit()`
-  sind aktuell noch hart kodiert; die Beeren-Anzahl `4` beim Zeichnen der
-  Büsche im Client ebenfalls (entspricht `bushBerries`).
+  nötigen Werte per `welcome`-Nachricht vom Server. Ausnahmen: Schwellwert
+  `70` für die Regeneration und die `+ 20`-Toleranz beim Treffer-Check für
+  Tiere und Wände in `tryHit()` sind aktuell noch hart kodiert (der Aufschlag
+  für Ressourcen ist `CONFIG.hitMargin`); die Beeren-Anzahl `4` beim Zeichnen
+  der Büsche im Client ebenfalls (entspricht `bushBerries`).
 - `game.js` (Client) und `server.js` sind bewusst **jeweils eine einzige Datei
   ohne Module**. Neue Logik in den passenden nummerierten Abschnitt einordnen
   und den Aufbau-Kommentar am Dateianfang bei größeren Änderungen aktualisieren.
@@ -314,4 +353,4 @@ CI/CD-Prozess.
 - Geplante Features (siehe README.md): warme Kleidung aus Fellen o. ä.
   Multiplayer, Biome (inkl. Strand), Tag/Nacht-Wechsel, Tiere, Crafting
   (inkl. Werkzeug-Stufen von Holz bis Diamant), Lagerfeuer, Kälte,
-  Punkte/Rangliste und Bots sind umgesetzt.
+  Punkte/Rangliste, Wände (inkl. Bot-Basen) und Bots sind umgesetzt.

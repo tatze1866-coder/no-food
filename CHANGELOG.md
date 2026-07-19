@@ -2,6 +2,45 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-18 — Wände, Bot-Basen & Mehrfach-Abbau (Branch `kimi`)
+
+### Hinzugefügt
+- **Wände zum Basen bauen**: zwei neue Strukturen — **Holzwand**
+  (`wood_wall` 🟫, Rezept 3 Holz) und **Steinwand** (`stone_wall` 🧱,
+  Rezept 1 Holz + 5 Stein). Sie werden per Hotbar-Taste vor dem Spieler
+  aufgestellt: die Platzier-Logik in `placeItem()` gilt jetzt für jedes
+  Item mit `placeable: true` im `ITEMS`-Katalog (neu haben auch die Wände
+  und das Lagerfeuer dieses Flag). Werte in `WALL_TYPES` (`server.js`):
+  Holzwand Radius 28 / **120 Leben**, Steinwand Radius 28 / **300 Leben**.
+- **Wände haben Hitboxen und sind zerstörbar**: sie blockieren Spieler UND
+  Tiere (Push-out wie bei Ressourcen — Basen halten Feinde ab; Blöcke in
+  `update()` und `moveAnimal()`). Per Schlag lassen sie sich abbauen
+  (Schaden = Spielerschlag + Waffen-Bonus, neue Funktion `hitDamage()`),
+  bei 0 Leben werden sie entfernt — sie lassen nichts fallen.
+  Platzier-Regeln: nicht im Ozean, 50 px Mindestabstand zu anderen Wänden.
+  Der Client zeichnet sie in `drawStructure()` — beschädigt mit Rissen ab
+  `healthPct < 0.6`; im `state` bekommen nur Wände `healthPct` (0..1),
+  `fuelPct` geht weiterhin bei jeder Struktur mit (bei Wänden immer 1).
+- **Bots bauen Basen** (Abschnitt 5b in `server.js`): nach der
+  Ausrüstungs-Leiter baut jeder Bot eine Basis aus **8 Holzwänden im Kreis
+  (Radius 120)** um ein einmal gewähltes Zentrum (`baseCenter`,
+  `baseWalls`, `baseDone`). Er holzt zwischendurch für das Wand-Material
+  und baut die Wände selbst; klappt ein Platz 3 s lang nicht (z. B. weil
+  er im Ozean liegt), überspringt er ihn (`placeTimer`). Nach Tod/Respawn
+  fängt die Basis von vorn an.
+
+### Geändert
+- **Mehrfach-Abbau + größere Trefferzone**: `CONFIG.hitMargin = 35`
+  (vorher fest 20). Ein Schlag erntet jetzt **ALLE Ressourcen** in
+  Reichweite (`radius + hitMargin`) gleichzeitig — stehen zwei Bäume oder
+  Steine dicht beieinander, erwischt man beide. Tiere bleiben Einzelziele
+  (Aufschlag +20, gewinnen als nächstes Ziel); Wände trifft man nur gezielt
+  (Trefferpunkt muss in der Wand liegen — dafür schlägt die Wand dann immer
+  etwaige Ressourcen im selben Bereich, sonst wären sie an Bäumen
+  unverwundbar). Die Ertrags-Logik je Ressource ist in
+  `harvestResource()` ausgelagert; `hitMargin` geht per `welcome`-Config
+  an den Client (alle getroffenen Ressourcen wackeln in `predictShake`).
+
 ## 2026-07-18 — Merge main → kimi #2 + Bots (Branch `kimi`)
 
 ### Geändert (Merge)

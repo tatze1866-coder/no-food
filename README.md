@@ -50,7 +50,7 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
 | **Maus** | Blickrichtung |
 | **Linksklick** | Schlagen / Sammeln |
 | **E** | Essen (bestes vorhandenes) |
-| **1–9** | Item im Hotbar-Slot benutzen (Werkzeug anlegen, Essen, Lagerfeuer setzen) |
+| **1–9** | Item im Hotbar-Slot benutzen (Werkzeug anlegen, Essen, Lagerfeuer/Wände setzen) |
 | **C** | Bau-Menü öffnen/schließen |
 | **F** | Lagerfeuer setzen |
 
@@ -87,14 +87,22 @@ Der Client wählt bei HTTPS automatisch die gesicherte Verbindung (`wss://`).
   **Schaufel** für Sand). Höhere Stufen sammeln mehr und schlagen härter
   zu; **Golderz** lässt sich nur mit Spitzhacke abbauen, **Diamant** nur
   mit mindestens der Gold-Spitzhacke
+- 🟫🧱 **Wände** (Holz- und Steinwand, Rezepte im Bau-Menü) stellst du per
+  Hotbar-Taste auf: sie blockieren **Tiere und Spieler** — mit einer Basis
+  aus Wänden hältst du Feinde ab. Wände haben Leben und lassen sich per
+  Schlag zerstören (mit besseren Waffen geht's schneller)
+- ⛏️ **Mehrfach-Abbau**: stehen Ressourcen dicht beieinander, trifft ein
+  Schlag **alle** in Reichweite gleichzeitig (Tiere und Wände bleiben
+  Einzelziele)
 - 🏆 **Punkte** gibt's fürs Sammeln, Bauen und Töten von Tieren — die
   **Rangliste** oben rechts zeigt die Top 5 (Punkte bleiben nach dem Tod
   erhalten). Holz, Stein und Erze stapeln sich bis **9999**
 - 🤖 **Bots** spielen mit: Bot-Mitspieler sammeln und bauen wie echte
-  Spieler und tauchen in der Rangliste auf
+  Spieler, bauen sich auch **eigene Basen** aus Holzwänden und tauchen in
+  der Rangliste auf
 - 🍓 **Beerensträucher** schlagen gibt **Beeren** (wachsen nach!)
 - 🚶 **Hitboxen**: Du kannst nicht mehr durch Bäume, Steine, Erze, Sträucher
-  — und auch nicht durch andere Spieler — hindurchlaufen
+  — und auch nicht durch Wände oder andere Spieler — hindurchlaufen
 - 🍖 Dein **Hunger** sinkt ständig — iss Beeren mit **E**
 - ❤️ Bei Hunger auf 0 verlierst du **Leben**. Bei vollem Bauch heilst du langsam.
 
@@ -121,7 +129,8 @@ und danach einfach den Server neu starten.
 - [x] Werkzeuge sammeln schneller (höhere Stufe = mehr pro Schlag)
 - [x] Strand-Biom mit Sand, Krabben und Rüstung (Krabbenhelm)
 - [x] Punkte und Rangliste (Leaderboard)
-- [x] Bots (KI-Mitspieler)
+- [x] Bots (KI-Mitspieler — bauen auch eigene Basen)
+- [x] Wände und Basen bauen (Holz-/Steinwand, blockieren Tiere und Spieler)
 - [x] Kälte nachts und im Schnee (Lagerfeuer wärmt!)
 - [x] Tag/Nacht-Wechsel
 - [x] Tiere (Jagd und Gefahr)
