@@ -2,6 +2,53 @@
 
 Alle nennenswerten Änderungen am Projekt **no-food** werden hier festgehalten.
 
+## 2026-07-19 — Merge von `kimi`: Bot-Basen als Zuhause (Branch `main`)
+
+### Hinzugefügt (von Kimi)
+- **Die Bot-Basis ist jetzt ein Zuhause**: ein enger Ring aus 7 Holzwänden
+  (`botBaseRadius` 80) um die eigene Position, Platz 0 bleibt als Tür frei.
+  Ist die Basis fertig, sammeln Bots bevorzugt in deren Umkreis, wandern an
+  der kurzen Leine und stellen ihr Lagerfeuer in der Basis-Mitte auf.
+- **Flucht nach Hause**: Vor feindlichen Tieren laufen Bots hinter die eigenen
+  Wände — aber nur, wenn die Basis nicht näher an der Gefahr liegt.
+- **Reparatur der Basis** (`botRepairCheck`, alle 8 s): fehlende Ringwände
+  werden nachgebaut. Nach dem Tod bleibt ein noch stehender Ring (≥ 4 Wände)
+  das Zuhause, statt woanders von vorn anzufangen.
+- **Wände merken sich ihren Erbauer** (`owner`): Bots schlagen ihre eigenen
+  Wände nicht mehr ein, wenn sie dahinter Ressourcen ernten.
+- `botFleeRange` 150 → 180.
+
+### Behoben (beim Zusammenführen aufgefallen)
+- **Bots verhungerten an der eigenen Basis.** Kimi's `botHomeRange` von 600 px
+  stammt aus der Zeit der kleinen Karte. In der heutigen 36000-px-Welt liegen
+  in diesem Umkreis im Schnitt **keine zwei Beerensträucher** (525 Sträucher
+  auf ~324 Mio. px² Wald) — zusammen mit den seit dem letzten Release
+  *endlichen, langsam nachwachsenden* Vorkommen führte das dazu, dass Bots mit
+  fertiger Basis ihre Umgebung leer sammelten und dort sitzen blieben. Im
+  Test fiel **jeder** Bot auf Hunger 0, drei von sechs starben.
+  Zwei Korrekturen: `botHomeRange` auf 2000 angehoben, und `botPickResource()`
+  weicht jetzt automatisch auf die große Suchreichweite (`botGatherRange`) aus,
+  wenn in der Heimat nichts (mehr) zu holen ist. Das Zuhause bleibt damit die
+  bevorzugte Gegend, kann den Bot aber nicht mehr verhungern lassen.
+- **Reparatur baute stehende Wände sinnlos nach.** Die Prüfung suchte eine Wand
+  im 30-px-Umkreis der Soll-Position; `placeItem()` setzt sie aber 50 px *vor*
+  den Bot, der beim Bauen nur bis auf 30 px herangeht — die Wand landet also
+  20-50 px neben der Soll-Position (nachgemessen: 48 px). Die Prüfung hielt
+  intakte Wände deshalb für zerstört und ließ sie neu bauen, was am
+  50-px-Mindestabstand scheiterte. Toleranz auf 55 px angehoben (bleibt unter
+  den 61 px Abstand zweier Nachbarplätze, verwechselt sie also nicht).
+- Beim Merge wäre außerdem beinahe die Verallgemeinerung von `botPickResource()`
+  auf `RESOURCE_POOLS` verlorengegangen (Kimi's Stand kannte nur den alten
+  hartkodierten `"rock"`-Check für leere Vorkommen) — beide Seiten sind jetzt
+  kombiniert.
+
+### Nicht behoben (bewusst, kein Merge-Fehler)
+- Der Punktestand der Bots stagniert, sobald Basis und Ausrüstung fertig sind.
+  Ursache ist bestehendes Design: Punkte gibt es nur fürs Sammeln von Holz und
+  Erzen, und fertige Bots horten Holz bis zur Inventar-Obergrenze (`capacity`
+  20) — danach liefert `giveItem()` nichts mehr, also auch keine Punkte. Die
+  Bots leben und essen dabei normal weiter.
+
 ## 2026-07-19 — Crafting-HUD-Sortierung + Lagerfeuer-Lichtkreis (Branch `main`)
 
 ### Geändert
