@@ -29,6 +29,7 @@ const CONFIG = {
   maxHealth: 100,
   maxHunger: 100,
   capacity: 20,
+  chestRange: 90, // ab wann das Kisten-Panel erscheint
   biomes: [],   // Biom-Rechtecke inkl. Farbe — kommen beim Beitritt vom Server
   rivers: [],   // Fluss-Linien inkl. Breite — kommen beim Beitritt vom Server
 };
@@ -327,7 +328,8 @@ function ownAngle() {
 // sie zuletzt gemeldet hat. Spieler und Tiere haben zusätzlich x/y (weich
 // bewegte Anzeige-Position) und tx/ty (Ziel-Position vom Server).
 let resources = [];
-let structures = [];      // Lagerfeuer usw. (vom Server gemeldet)
+let structures = [];      // Lagerfeuer, Wände, Kisten (vom Server gemeldet)
+let drops = [];           // Abgelegte Item-Haufen (vom Server gemeldet)
 const players = new Map();
 const animals = new Map();
 
@@ -408,8 +410,10 @@ function applyState(msg) {
     }
   }
 
-  // Lagerfeuer (kommen komplett in jedem state mit)
+  // Lagerfeuer, Wände, Kisten (kommen komplett in jedem state mit)
   if (msg.structures) structures = msg.structures;
+  // Abgelegte Item-Haufen (kommen ebenfalls komplett in jedem state mit)
+  if (msg.drops) drops = msg.drops;
 }
 
 // ---------- 6. SPIEL-LOGIK ----------
@@ -508,6 +512,7 @@ function updateHUD(me) {
     // bei 0 (warm) bleibt er ausgeblendet, statt leer nebenherzustehen.
     document.getElementById("cold-bar").classList.toggle("hidden", cold <= 0);
     updateInventory(me);
+    updateChestPanel(me);
   }
   document.getElementById("player-count").textContent = players.size + " Spieler online";
   updateLeaderboard();
@@ -557,9 +562,10 @@ function escapeHtml(str) {
 }
 
 // Liste der Item-IDs, die der Spieler besitzt (Anzahl > 0), in der
-// Reihenfolge des Katalogs. Daraus entstehen die Hotbar-Slots 1 bis 9:
-// Sowohl die Anzeige (updateInventory) als auch die Zahlentasten
-// (useHotbarSlot) nutzen diese Funktion — so stimmen beide immer überein.
+// Reihenfolge des Katalogs. Daraus entstehen die Hotbar-Slots: 1-9 in der
+// Hauptreihe, plus 10-18 in der Rucksack-Bonusreihe (siehe updateInventory).
+// Sowohl die Anzeige als auch die Zahlentasten (useHotbarSlot, nur für die
+// ersten 9) nutzen diese Funktion — so stimmen beide immer überein.
 function hotbarItems(me) {
   const inv = me.inventory || {};
   const list = [];
@@ -573,59 +579,145 @@ function hotbarItems(me) {
 // (sonst würde jeder Klick auf ein Werkzeug 60-mal pro Sekunde „weggewischt").
 let invSignature = "";
 
+// ID der Kiste, neben der man gerade steht (siehe updateChestPanel), oder
+// null. Rechtsklick auf ein Inventar-Item nutzt das: mit Kiste in der Nähe
+// wird eingelagert, sonst auf den Boden gelegt.
+let nearChestId = null;
+
+// Baut eine einzelne Hotbar-Box. `hotkey` ist die Zahlentaste (1-9) für die
+// Anzeige in der Ecke, oder null für die Rucksack-Bonusreihe (dort gibt es
+// keine Taste — die Slots sind trotzdem klickbar, siehe unten).
+function buildSlot(me, inv, id, hotkey) {
+  const slot = document.createElement("div");
+  slot.className = "slot";
+
+  let html = hotkey !== null ? '<span class="slot-num">' + hotkey + "</span>" : "";
+
+  if (id) {
+    const item = ITEMS[id];
+    html += '<span class="icon">' + itemIconHtml(id) + "</span><span>" + inv[id] + "</span>";
+    attachItemTooltip(slot, id); // eigene Info-Karte statt Browser-Tooltip
+
+    // Rechtsklick auf JEDES Item: steht man neben einer Kiste, wandert der
+    // ganze Stapel dort hinein, sonst landet er als Fundstück am Boden.
+    slot.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      if (nearChestId !== null) {
+        sendMessage({ t: "chestDeposit", id: nearChestId, item: id });
+      } else {
+        sendMessage({ t: "drop", item: id });
+      }
+    });
+
+    if (item.tool) {
+      slot.classList.add("tool");
+      if (me.equipped === id) slot.classList.add("equipped");
+      slot.addEventListener("click", () => {
+        sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
+      });
+    } else if (item.armor) {
+      // Rüstung (z.B. Krabbenhelm): eigener Ausrüstungs-Platz, gleiche
+      // Optik wie Werkzeuge (anklickbar, "equipped"-Rahmen).
+      slot.classList.add("tool");
+      if (me.armor === id) slot.classList.add("equipped");
+      slot.addEventListener("click", () => {
+        sendMessage({ t: "equipArmor", item: me.armor === id ? null : id });
+      });
+    } else if (item.food) {
+      // Essen und platzierbare Items haben keine eigene Optik, sind aber
+      // genau wie bei den Zahlentasten (useHotbarSlot) anklickbar — nötig,
+      // weil die Rucksack-Bonusreihe keine Zahlentaste hat.
+      slot.addEventListener("click", () => sendMessage({ t: "eat", item: id }));
+    } else if (item.placeable) {
+      slot.addEventListener("click", () => sendMessage({ t: "place", item: id }));
+    }
+  } else {
+    // Leere Boxen werden abgedimmt gezeichnet
+    slot.classList.add("empty");
+  }
+
+  slot.innerHTML = html;
+  return slot;
+}
+
 function updateInventory(me) {
   const inv = me.inventory || {};
   const signature = JSON.stringify(inv) + "|" + me.equipped + "|" + me.armor;
   if (signature === invSignature) return;
   invSignature = signature;
 
-  const container = document.getElementById("inventory");
-  container.innerHTML = "";
+  const mainRow = document.getElementById("inventory-main");
+  const extraRow = document.getElementById("inventory-extra");
+  mainRow.innerHTML = "";
+  extraRow.innerHTML = "";
 
   // Die belegten Items in Katalog-Reihenfolge = Inhalt der Hotbar
   const hotbar = hotbarItems(me);
+  const hasBackpack = (inv.backpack || 0) > 0;
 
-  // Immer genau 9 Boxen zeichnen — belegte mit Inhalt, der Rest leer
+  // Reihe 1: immer genau 9 Boxen, mit Zahlentasten 1-9 nutzbar
   for (let i = 0; i < 9; i++) {
-    const id = hotbar[i];
-    const slot = document.createElement("div");
-    slot.className = "slot";
+    mainRow.appendChild(buildSlot(me, inv, hotbar[i], i + 1));
+  }
 
-    // Kleine Nummer in der Ecke: die Taste, mit der man den Slot benutzt
-    let html = '<span class="slot-num">' + (i + 1) + "</span>";
-
-    if (id) {
-      const item = ITEMS[id];
-      html += '<span class="icon">' + itemIconHtml(id) + "</span><span>" + inv[id] + "</span>";
-      attachItemTooltip(slot, id); // eigene Info-Karte statt Browser-Tooltip
-
-      // Werkzeuge kann man anklicken, um sie auszurüsten (oder wegzulegen)
-      if (item.tool) {
-        slot.classList.add("tool");
-        if (me.equipped === id) slot.classList.add("equipped");
-        slot.addEventListener("click", () => {
-          sendMessage({ t: "equip", tool: me.equipped === id ? null : id });
-        });
-      } else if (item.armor) {
-        // Rüstung (z.B. Krabbenhelm): eigener Ausrüstungs-Platz, gleiche
-        // Optik wie Werkzeuge (anklickbar, "equipped"-Rahmen).
-        slot.classList.add("tool");
-        if (me.armor === id) slot.classList.add("equipped");
-        slot.addEventListener("click", () => {
-          sendMessage({ t: "equipArmor", item: me.armor === id ? null : id });
-        });
-      }
-    } else {
-      // Leere Boxen werden abgedimmt gezeichnet
-      slot.classList.add("empty");
+  // Reihe 2 (Rucksack-Bonus): weitere 9 Boxen für zusätzliche Item-Sorten,
+  // nur sichtbar, solange ein Rucksack im Inventar ist — kein Zahlentasten-
+  // Kürzel, aber jede Box bleibt anklickbar (siehe buildSlot).
+  extraRow.classList.toggle("hidden", !hasBackpack);
+  if (hasBackpack) {
+    for (let i = 9; i < 18; i++) {
+      extraRow.appendChild(buildSlot(me, inv, hotbar[i], null));
     }
-
-    slot.innerHTML = html;
-    container.appendChild(slot);
   }
 
   // Machbarkeit der Rezepte hängt am Inventar — also mit aktualisieren
   refreshRecipeMenu(me);
+}
+
+// Steht der Spieler neben einer Kiste, zeigt das Panel ihren Inhalt (kommt
+// schon komplett im "state" mit, siehe stateMessage im Server — kein eigenes
+// "Kiste öffnen" nötig). Klick auf ein Item darin holt es zurück ins eigene
+// Inventar; Rechtsklick auf ein eigenes Item legt es hinein (siehe buildSlot).
+let chestSignature = "";
+function updateChestPanel(me) {
+  let chest = null;
+  let bestDist = CONFIG.chestRange;
+  for (const s of structures) {
+    if (s.type !== "chest") continue;
+    const d = Math.hypot(s.x - me.x, s.y - me.y);
+    if (d < bestDist) { chest = s; bestDist = d; }
+  }
+  nearChestId = chest ? chest.id : null;
+
+  const panel = document.getElementById("chest-panel");
+  panel.classList.toggle("hidden", !chest);
+  if (!chest) return;
+
+  const inv = chest.inventory || {};
+  const signature = chest.id + "|" + JSON.stringify(inv);
+  if (signature === chestSignature) return;
+  chestSignature = signature;
+
+  const slots = document.getElementById("chest-slots");
+  slots.innerHTML = "";
+  const ids = Object.keys(inv).filter((id) => inv[id] > 0);
+  if (ids.length === 0) {
+    const hint = document.createElement("div");
+    hint.id = "chest-empty-hint";
+    hint.textContent = "Leer — Rechtsklick auf ein Item legt es hier ab.";
+    slots.appendChild(hint);
+    return;
+  }
+  for (const id of ids) {
+    const slot = document.createElement("div");
+    slot.className = "slot";
+    slot.innerHTML = '<span class="icon">' + itemIconHtml(id) + "</span><span>" + inv[id] + "</span>";
+    attachItemTooltip(slot, id);
+    slot.addEventListener("click", () => {
+      sendMessage({ t: "chestWithdraw", id: chest.id, item: id });
+    });
+    slots.appendChild(slot);
+  }
 }
 
 // ---------- CRAFTING-MENÜ ----------
@@ -749,7 +841,7 @@ function render() {
 
   // Ressourcen, Lagerfeuer, Tiere und Spieler nach Y-Position sortieren,
   // damit weiter unten stehende Dinge "davor" gezeichnet werden
-  const drawList = [...resources, ...structures, ...animals.values(), ...players.values()];
+  const drawList = [...resources, ...structures, ...drops, ...animals.values(), ...players.values()];
   drawList.sort((a, b) => a.y - b.y);
 
   for (const obj of drawList) {
@@ -759,6 +851,8 @@ function render() {
       drawAnimal(obj);
     } else if (obj.fuelPct !== undefined) {
       drawStructure(obj);
+    } else if (obj.itemId !== undefined) {
+      drawDrop(obj);
     } else {
       drawResource(obj);
     }
@@ -878,6 +972,34 @@ function drawWorldBorder() {
   ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
   ctx.lineWidth = 14;
   ctx.strokeRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
+}
+
+// Ein abgelegter Item-Haufen: kleiner Sack mit dem Item-Icon und der Anzahl,
+// falls mehr als eins drin liegt. Verschwindet von selbst (siehe Server).
+function drawDrop(d) {
+  const x = d.x, y = d.y;
+  ctx.fillStyle = "#a1887f";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(x, y, d.radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  const item = ITEMS[d.itemId];
+  ctx.font = "18px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  if (item) ctx.fillText(item.icon, x, y - 2);
+
+  if (d.amount > 1) {
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 3;
+    ctx.strokeText(String(d.amount), x, y + d.radius * 0.7);
+    ctx.fillText(String(d.amount), x, y + d.radius * 0.7);
+  }
 }
 
 function drawResource(res) {
@@ -1156,6 +1278,29 @@ function drawStructure(s) {
       ctx.lineTo(x + r * 0.1, y + r * 0.6);
       ctx.stroke();
     }
+    return;
+  }
+
+  if (s.type === "chest") {
+    // Kiste: brauner Kasten mit dunklerem Deckel-Strich und einem Schlüsselloch
+    const w = 46, h = 34;
+    ctx.fillStyle = "#8d6b42";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.rect(x - w / 2, y - h / 2, w, h);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "#5d4527";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, y - h * 0.1);
+    ctx.lineTo(x + w / 2, y - h * 0.1);
+    ctx.stroke();
+    ctx.fillStyle = "#3e2f1c";
+    ctx.beginPath();
+    ctx.arc(x, y + h * 0.12, 3, 0, Math.PI * 2);
+    ctx.fill();
     return;
   }
 

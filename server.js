@@ -108,11 +108,17 @@ const CONFIG = {
 
   // --- Item-/Crafting-System (Claude) -------------------------------
   capacity: 20,           // Obergrenze pro Item-Sorte im Inventar
-  backpackCapacity: 40,   // Obergrenze mit Rucksack
-  bulkCapacity: 9999,     // Obergrenze für Holz/Stein/Eisen/Gold/Diamant (siehe BULK_ITEMS)
+  woodCapacity: 60,       // Eigenes, festes Holz-Limit — unabhängig vom Rucksack
+  bulkCapacity: 9999,     // Obergrenze für Stein/Eisen/Gold/Diamant (siehe BULK_ITEMS)
   woodPerHit: 1,          // Holz pro Baum-Schlag mit bloßer Hand
   stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
   orePerHit: 1,           // Erz pro Schlag mit bloßer Hand (mit Spitzhacke deutlich mehr)
+
+  // Abgelegte Items (Fundstellen zum Wieder-Aufsammeln) und Kisten
+  dropLifetime: 120,     // Sekunden, bis ein abgelegter Item-Haufen verschwindet
+  dropRadius: 20,        // Hitbox eines abgelegten Item-Haufens
+  chestCapacity: 200,    // Obergrenze pro Item-Sorte in einer Kiste
+  chestRange: 90,        // Abstand, aus dem eine Kiste benutzt werden kann
 
   // Werkzeug-Stufen: Holz < Eisen < Gold — jede Stufe sammelt mehr
   // bzw. schlägt härter zu als die vorherige.
@@ -271,6 +277,7 @@ const ITEMS = {
   campfire:    { name: "Lagerfeuer",      icon: "🔥", placeable: true },
   wood_wall:   { name: "Holzwand",        icon: "🟫", placeable: true },
   stone_wall:  { name: "Steinwand",       icon: "🧱", placeable: true },
+  chest:       { name: "Kiste",           icon: "📦", placeable: true },
   backpack:    { name: "Rucksack",        icon: "🎒" },
 
   // Tier-Drops (Fleisch fällt schon von Tieren; Felle sind für spätere
@@ -320,6 +327,7 @@ const RECIPES = {
 
   campfire: { name: "Lagerfeuer", cost: { wood: 8, stone: 4 },  result: { campfire: 1 } },
   backpack: { name: "Rucksack",   cost: { wood: 12, stone: 4 }, result: { backpack: 1 } },
+  chest:    { name: "Kiste",      cost: { wood: 10 },           result: { chest: 1 } },
   wood_wall: { name: "Holzwand", cost: { wood: 3 }, result: { wood_wall: 1 } },
   stone_wall: { name: "Steinwand", cost: { wood: 1, stone: 5 }, result: { stone_wall: 1 } },
   // Kochen: braucht rohes Fleisch (von Tieren) UND Nähe zum Lagerfeuer
@@ -752,6 +760,37 @@ const changedOres = new Set();
 let structures = [];
 let nextStructureId = 1;
 
+// ---------- ABGELEGTE ITEMS (Spieler wirft etwas aus dem Inventar) ----------
+// Eigenes, drittes Array (neben resources/structures): ein Haufen ist KEIN
+// Hindernis (keine Kollision) und verschwindet nach dropLifetime von selbst —
+// beides unterscheidet ihn von Ressourcen und platzierten Strukturen.
+let drops = [];
+let nextDropId = 1;
+
+// Den ganzen Bestand eines Items vor dem Spieler ablegen (in Blickrichtung,
+// wie placeItem). Ausgerüstetes Werkzeug/Rüstung wird dabei abgelegt.
+function dropItem(player, itemId) {
+  if (player.dead) return;
+  const n = countItem(player, itemId);
+  if (n <= 0 || !ITEMS[itemId]) return;
+
+  if (player.equipped === itemId) player.equipped = null;
+  if (player.armor === itemId) player.armor = null;
+  delete player.inventory[itemId];
+
+  const px = clamp(player.x + Math.cos(player.angle) * 50, 0, CONFIG.worldSize);
+  const py = clamp(player.y + Math.sin(player.angle) * 50, 0, CONFIG.worldSize);
+  drops.push({
+    id: nextDropId++,
+    itemId,
+    amount: n,
+    x: px,
+    y: py,
+    radius: CONFIG.dropRadius,
+    expiresAt: worldTime + CONFIG.dropLifetime,
+  });
+}
+
 // Steht an Position x,y ein brennendes Lagerfeuer in Reichweite?
 function nearCampfire(x, y) {
   for (const s of structures) {
@@ -810,20 +849,24 @@ function countItem(player, id) {
 
 // Rohstoffe, die man in großen Mengen horten kann (Stacks bis 9999) —
 // alles andere (Fleisch, Beeren, Werkzeuge, Felle ...) bleibt bei der
-// normalen Obergrenze (capacity/backpackCapacity).
-const BULK_ITEMS = new Set(["wood", "stone", "iron_ore", "gold_ore", "diamond"]);
+// normalen Obergrenze (capacity). Holz hat sein eigenes, festes Limit
+// (woodCapacity) statt in diesem großen Topf zu landen.
+const BULK_ITEMS = new Set(["stone", "iron_ore", "gold_ore", "diamond"]);
 
-// Die aktuelle Obergrenze pro Item-Sorte (mit Rucksack höher; Holz, Stein,
-// Erze und Diamant haben einen eigenen, viel höheren Stack-Deckel).
-function capacityFor(player, id) {
+// Die Obergrenze pro Item-Sorte. Der Rucksack erhöht sie NICHT mehr — er
+// schaltet stattdessen eine zweite Inventarleiste im Client frei (siehe
+// updateInventory() in game.js): man trägt mit Rucksack also mehr
+// Item-SORTEN gleichzeitig, nicht größere Stacks einer einzelnen Sorte.
+function capacityFor(id) {
+  if (id === "wood") return CONFIG.woodCapacity;
   if (BULK_ITEMS.has(id)) return CONFIG.bulkCapacity;
-  return countItem(player, "backpack") > 0 ? CONFIG.backpackCapacity : CONFIG.capacity;
+  return CONFIG.capacity;
 }
 
 // Ein Item hinzufügen, aber nie über die Obergrenze hinaus.
 // Gibt zurück, wie viel wirklich Platz gefunden hat.
 function giveItem(player, id, n) {
-  const max = capacityFor(player, id);
+  const max = capacityFor(id);
   const have = countItem(player, id);
   const room = Math.max(0, max - have);
   const added = Math.min(n, room);
@@ -968,8 +1011,48 @@ function placeItem(player, itemId) {
       health: WALL_TYPES[itemId].health,
       maxHealth: WALL_TYPES[itemId].health,
     });
+  } else if (itemId === "chest") {
+    // Kiste: geteilter Lagerplatz für alle Spieler, kein Leben/keine
+    // Kollision — nur der leere Inhalt (siehe chestDeposit/chestWithdraw).
+    structures.push({ id: nextStructureId++, type: "chest", x: px, y: py, inventory: {} });
   }
   return true;
+}
+
+// Die Kiste mit dieser ID finden (oder null, falls längst zerstört/falsche ID)
+function findChest(id) {
+  const s = structures.find((s) => s.id === id && s.type === "chest");
+  return s || null;
+}
+
+// Ein Item VOLLSTÄNDIG vom Spieler in eine nahe Kiste umladen (so viel wie
+// reinpasst — der Rest bleibt im Spieler-Inventar, nichts geht verloren).
+function chestDeposit(player, chestId, itemId) {
+  const chest = findChest(chestId);
+  if (!chest || dist(player.x, player.y, chest.x, chest.y) > CONFIG.chestRange) return;
+  const n = countItem(player, itemId);
+  if (n <= 0 || !ITEMS[itemId]) return;
+
+  const have = chest.inventory[itemId] || 0;
+  const moved = Math.min(n, Math.max(0, CONFIG.chestCapacity - have));
+  if (moved <= 0) return;
+  chest.inventory[itemId] = have + moved;
+  player.inventory[itemId] -= moved;
+  if (player.inventory[itemId] <= 0) delete player.inventory[itemId];
+}
+
+// Umgekehrte Richtung: so viel wie möglich aus der Kiste ins eigene
+// Inventar holen (begrenzt durch die normale Obergrenze des Spielers).
+function chestWithdraw(player, chestId, itemId) {
+  const chest = findChest(chestId);
+  if (!chest || dist(player.x, player.y, chest.x, chest.y) > CONFIG.chestRange) return;
+  const have = chest.inventory[itemId] || 0;
+  if (have <= 0) return;
+
+  const added = giveItem(player, itemId, have);
+  if (added <= 0) return;
+  chest.inventory[itemId] -= added;
+  if (chest.inventory[itemId] <= 0) delete chest.inventory[itemId];
 }
 
 // ---------- 5b. BOTS (KI-Mitspieler, von Kimi) ----------
@@ -2513,6 +2596,11 @@ function update(dt) {
     }
   }
 
+  // --- Abgelegte Item-Haufen verschwinden nach dropLifetime von selbst ---
+  for (let i = drops.length - 1; i >= 0; i--) {
+    if (worldTime > drops[i].expiresAt) drops.splice(i, 1);
+  }
+
   // --- Tiere verhalten sich (jagen, fliehen, wandern) ---
   for (const animal of animals) {
     updateAnimal(animal, dt);
@@ -2780,6 +2868,17 @@ function tryHit(player) {
       if (d < resourceDist) resourceDist = d;
     }
   }
+  // Abgelegte Item-Haufen zählen für den Vorrang genau wie Ressourcen —
+  // sonst könnte man sein eigenes Fundstück nie aufheben, sobald zufällig
+  // eine Wand oder ein Tier als "näher" gilt.
+  const dropHits = [];
+  for (const d of drops) {
+    const dd = dist(hitX, hitY, d.x, d.y);
+    if (dd < d.radius + CONFIG.hitMargin) {
+      dropHits.push(d);
+      if (dd < resourceDist) resourceDist = dd;
+    }
+  }
   for (const animal of animals) {
     if (animal.dead) continue;
     const type = ANIMAL_TYPES[animal.species];
@@ -2857,6 +2956,15 @@ function tryHit(player) {
   for (const [res, index] of hits) {
     harvestResource(player, res, index);
   }
+  // ... und ebenso alle abgelegten Item-Haufen aufsammeln (so viel wie ins
+  // Inventar passt — der Rest bleibt liegen statt verloren zu gehen).
+  for (const d of dropHits) {
+    const added = giveItem(player, d.itemId, d.amount);
+    if (added > 0) {
+      d.amount -= added;
+      if (d.amount <= 0) drops.splice(drops.indexOf(d), 1);
+    }
+  }
 }
 
 // ---------- 7. NETZWERK ----------
@@ -2876,7 +2984,7 @@ function tryHit(player) {
 // Server -> Browser:
 //   { t: "welcome", id, config, items, recipes, world }   Begrüßung + Kataloge
 //                 (config enthält u.a. biomes für den Hintergrund)
-//   { t: "state", players, bushes, ores, animals, night, structures }
+//   { t: "state", players, bushes, ores, animals, night, structures, drops }
 //                 Spielstand (TICKS_PER_SECOND-mal/s); jeder Spieler mit
 //                 health, hunger, cold, inventory {id->Anzahl} + equipped
 //   { t: "playerLeft", id }                 Ein Spieler hat verlassen
@@ -2967,8 +3075,19 @@ function stateMessage() {
       fuelPct: s.type === "campfire" ? Math.max(0, Math.min(1, s.fuel / CONFIG.campfireBurnTime)) : 1,
     };
     if (WALL_TYPES[s.type]) entry.healthPct = s.health / s.maxHealth;
+    // Kisten sind wenige, also einfach den ganzen Inhalt mitschicken — so
+    // sehen alle Spieler, die in der Nähe stehen, immer den aktuellen Stand
+    // (kein eigenes "Kiste öffnen" nötig, siehe updateChestPanel im Client).
+    if (s.type === "chest") entry.inventory = s.inventory;
     return entry;
   });
+
+  // Abgelegte Item-Haufen — wie Strukturen einfach komplett mitgeschickt,
+  // es sind selten mehr als eine Handvoll gleichzeitig in der Welt.
+  const dropList = drops.map((d) => ({
+    id: d.id, itemId: d.itemId, amount: d.amount,
+    x: Math.round(d.x), y: Math.round(d.y), radius: d.radius,
+  }));
 
   return {
     t: "state",
@@ -2978,6 +3097,7 @@ function stateMessage() {
     animals: animalList,
     night: isNight(),
     structures: structureList,
+    drops: dropList,
   };
 }
 
@@ -3017,6 +3137,7 @@ wss.on("connection", (ws) => {
           maxHunger: CONFIG.maxHunger,
           capacity: CONFIG.capacity,
           campfireRadius: CONFIG.campfireRadius, // für den Licht-/Wärmekreis ums Lagerfeuer
+          chestRange: CONFIG.chestRange,         // ab wann das Kisten-Panel erscheint
           leaderboardSize: CONFIG.leaderboardSize,
           biomes: BIOMES,   // Biom-Rechtecke inkl. Farbe (zum Zeichnen + Minimap)
           rivers: RIVERS,   // Fluss-Linien inkl. Breite (zum Zeichnen)
@@ -3057,6 +3178,12 @@ wss.on("connection", (ws) => {
       if (msg.item === null || typeof msg.item === "string") equipArmor(player, msg.item);
     } else if (msg.t === "place") {
       if (typeof msg.item === "string") placeItem(player, msg.item);
+    } else if (msg.t === "drop") {
+      if (typeof msg.item === "string") dropItem(player, msg.item);
+    } else if (msg.t === "chestDeposit") {
+      if (typeof msg.id === "number" && typeof msg.item === "string") chestDeposit(player, msg.id, msg.item);
+    } else if (msg.t === "chestWithdraw") {
+      if (typeof msg.id === "number" && typeof msg.item === "string") chestWithdraw(player, msg.id, msg.item);
     } else if (msg.t === "respawn") {
       if (player.dead) resetPlayer(player);
     }

@@ -9,8 +9,13 @@
 <body>
   <canvas id="game"></canvas>
 
-  <!-- Anzeige oben links: Inventar (wird vom Spiel dynamisch gefüllt) -->
-  <div id="inventory"></div>
+  <!-- Anzeige oben links: Inventar (wird vom Spiel dynamisch gefüllt).
+       Zwei Reihen zu je 9 Boxen: die zweite (inventory-extra) erscheint
+       nur, solange ein Rucksack im Inventar ist. -->
+  <div id="inventory">
+    <div id="inventory-extra" class="inv-row hidden"></div>
+    <div id="inventory-main" class="inv-row"></div>
+  </div>
 
   <!-- Anzeige unten: Lebens-, Hunger- und Kältebalken, nebeneinander -->
   <div id="bars">
@@ -38,9 +43,16 @@
     <div id="recipe-list"></div>
   </div>
 
+  <!-- Kisten-Panel: erscheint automatisch, sobald man neben einer
+       platzierten Kiste steht (siehe updateChestPanel in game.js) -->
+  <div id="chest-panel" class="hidden">
+    <h2>📦 Kiste</h2>
+    <div id="chest-slots"></div>
+  </div>
+
   <!-- Kurze Steuerungs-Hilfe -->
   <div id="help">
-    WASD = Laufen &nbsp;|&nbsp; Maus = Schauen &nbsp;|&nbsp; Klick = Schlagen &nbsp;|&nbsp; E = Essen (Beeren &amp; Fleisch) &nbsp;|&nbsp; 1-9 = Item benutzen &nbsp;|&nbsp; C = Bauen &nbsp;|&nbsp; F = Lagerfeuer setzen &nbsp;|&nbsp; Werkzeug anklicken = ausrüsten
+    WASD = Laufen &nbsp;|&nbsp; Maus = Schauen &nbsp;|&nbsp; Klick = Schlagen &nbsp;|&nbsp; E = Essen (Beeren &amp; Fleisch) &nbsp;|&nbsp; 1-9 = Item benutzen &nbsp;|&nbsp; C = Bauen &nbsp;|&nbsp; F = Lagerfeuer setzen &nbsp;|&nbsp; Werkzeug anklicken = ausrüsten &nbsp;|&nbsp; Rechtsklick im Inventar = ablegen (bei Kiste: einlagern)
   </div>
 
   <!-- Start-Bildschirm: Name eingeben und beitreten -->

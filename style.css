@@ -19,14 +19,27 @@ body {
   cursor: crosshair;
 }
 
-/* Hotbar unten in der Mitte, unter den Leben/Hunger/Kälte-Balken */
+/* Hotbar unten in der Mitte, unter den Leben/Hunger/Kälte-Balken.
+   Zwei Reihen übereinander: inventory-extra (Rucksack-Bonusreihe) oben,
+   inventory-main (die normalen 9 Slots mit Zahlentasten 1-9) unten. */
 #inventory {
   position: fixed;
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  flex-direction: column;
   gap: 12px;
+}
+
+.inv-row {
+  display: flex;
+  gap: 12px;
+}
+
+/* Ohne Rucksack bleibt die Bonusreihe unsichtbar */
+#inventory-extra.hidden {
+  display: none;
 }
 
 /* Die Hotbar hat immer 9 gleich große Boxen (belegt oder leer) */
@@ -487,6 +500,57 @@ body {
   font-size: 18px;
   font-weight: bold;
   margin-bottom: 2px;
+}
+
+/* Kisten-Panel oben links: nur sichtbar, solange man neben einer Kiste
+   steht (siehe updateChestPanel in game.js) */
+#chest-panel {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  width: 260px;
+  background: rgba(30, 20, 10, 0.85);
+  border: 4px solid #000;
+  border-radius: 12px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
+  padding: 12px;
+  color: #fff;
+}
+
+#chest-panel.hidden {
+  display: none;
+}
+
+#chest-panel h2 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+#chest-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Kisten-Slots kleiner als die normale Hotbar — es ist nur ein Lager,
+   kein Zahlentasten-Zugriff nötig */
+#chest-slots .slot {
+  width: 64px;
+  height: 64px;
+  font-size: 13px;
+}
+
+#chest-slots .slot .icon {
+  font-size: 24px;
+}
+
+#chest-empty-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  text-align: center;
+  padding: 6px;
 }
 
 .recipe-head .icon-img {
