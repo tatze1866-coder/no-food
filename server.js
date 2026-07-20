@@ -187,7 +187,7 @@ const CONFIG = {
   // ------------------------------------------------------------------
 
   // --- Bots (KI-Mitspieler, von Kimi) ----------------------------------
-  botCount: 6,          // KI-Spieler, die wie echte Spieler sammeln und überleben
+  botCount: 20,          // KI-Spieler, die wie echte Spieler sammeln und überleben
   botRespawn: 15,       // Sekunden bis ein toter Bot neu startet
   // Aufgaben-Wahl (Utility-KI): jede Aufgabe bekommt pro Tick einen Score.
   // Die laufende Aufgabe wird nur gewechselt, wenn sie ungültig/fertig ist
@@ -204,14 +204,14 @@ const CONFIG = {
   // Welt passen (36000px, Wald ~324 Mio px² für 525 Sträucher): bei 600px
   // lägen im Schnitt keine 2 Sträucher in Reichweite — die Bots verhungerten
   // an der eigenen Basis, seit Vorkommen endlich sind und nachwachsen müssen.
-  botHomeRange: 2000,
+  botHomeRange: 20000,
   botRepairCheck: 8,    // Sekunden zwischen zwei Prüfungen der Basis-Wände
   botFireCheck: 5,      // Sekunden zwischen zwei Prüfungen des Basis-Feuers
   botFireMinFuel: 12,   // Brennstoff-Rest (Sekunden), ab dem ein neues Feuer gebaut wird
   botWallReplacePct: 0.35, // eigene Wände unter diesem Lebens-Anteil werden getauscht
   botBaseSiteSearch: 4500,   // Radius für die Basis-Standortsuche um den Bot (Pixel)
   botBaseSiteCandidates: 12, // so viele Zufalls-Punkte bewertet die Standortsuche
-  botBaseMaxSpawnDist: 9000, // die Basis darf nicht weiter vom Startpunkt weg liegen
+  botBaseMaxSpawnDist: 90000, // die Basis darf nicht weiter vom Startpunkt weg liegen
   // Bewegung (Tast-Sonden + Anti-Festklemmen mit Eskalation)
   botProbeDistance: 90, // so weit vor dem Bot prüfen die Sonden auf Hindernisse
   botStuckTime: 1.2,    // Sekunden ohne Fortschritt, bis der Umweg eskaliert
