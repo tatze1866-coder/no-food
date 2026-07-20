@@ -108,8 +108,7 @@ const CONFIG = {
 
   // --- Item-/Crafting-System (Claude) -------------------------------
   capacity: 20,           // Obergrenze pro Item-Sorte im Inventar
-  woodCapacity: 60,       // Eigenes, festes Holz-Limit — unabhängig vom Rucksack
-  bulkCapacity: 9999,     // Obergrenze für Stein/Eisen/Gold/Diamant (siehe BULK_ITEMS)
+  bulkCapacity: 500,      // Obergrenze für Holz/Stein/Eisen/Gold/Diamant (siehe BULK_ITEMS)
   woodPerHit: 1,          // Holz pro Baum-Schlag mit bloßer Hand
   stonePerHit: 1,         // Stein pro Stein-Schlag mit bloßer Hand
   orePerHit: 1,           // Erz pro Schlag mit bloßer Hand (mit Spitzhacke deutlich mehr)
@@ -847,18 +846,16 @@ function countItem(player, id) {
   return player.inventory[id] || 0;
 }
 
-// Rohstoffe, die man in großen Mengen horten kann (Stacks bis 9999) —
+// Rohstoffe, die man in großen Mengen horten kann (Stacks bis bulkCapacity) —
 // alles andere (Fleisch, Beeren, Werkzeuge, Felle ...) bleibt bei der
-// normalen Obergrenze (capacity). Holz hat sein eigenes, festes Limit
-// (woodCapacity) statt in diesem großen Topf zu landen.
-const BULK_ITEMS = new Set(["stone", "iron_ore", "gold_ore", "diamond"]);
+// normalen Obergrenze (capacity).
+const BULK_ITEMS = new Set(["wood", "stone", "iron_ore", "gold_ore", "diamond"]);
 
 // Die Obergrenze pro Item-Sorte. Der Rucksack erhöht sie NICHT mehr — er
 // schaltet stattdessen eine zweite Inventarleiste im Client frei (siehe
 // updateInventory() in game.js): man trägt mit Rucksack also mehr
 // Item-SORTEN gleichzeitig, nicht größere Stacks einer einzelnen Sorte.
 function capacityFor(id) {
-  if (id === "wood") return CONFIG.woodCapacity;
   if (BULK_ITEMS.has(id)) return CONFIG.bulkCapacity;
   return CONFIG.capacity;
 }
